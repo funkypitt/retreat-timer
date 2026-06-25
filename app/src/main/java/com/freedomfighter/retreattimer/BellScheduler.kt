@@ -17,6 +17,8 @@ import java.util.Calendar
 object BellScheduler {
 
     const val EXTRA_BELL_ID = "bell_id"
+    const val EXTRA_TALK_URI = "talk_uri"
+    const val EXTRA_TALK_TITLE = "talk_title"
     private const val RING_ACTION = "com.freedomfighter.retreattimer.RING"
 
     /** Cancel everything we previously scheduled, then arm the next occurrence of
@@ -30,7 +32,7 @@ object BellScheduler {
         // so walking 1..highWatermark covers deleted bells too.
         val highWatermark = BellStore.highWatermarkId(ctx).toInt()
         for (id in 1..highWatermark) {
-            am.cancel(firePendingIntent(ctx, id.toLong()))
+            am.cancel(cancelPendingIntent(ctx, id.toLong()))
         }
 
         bells.filter { it.enabled }.forEach { bell ->
@@ -40,7 +42,7 @@ object BellScheduler {
                 Intent(ctx, MainActivity::class.java),
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
             )
-            val firePi = firePendingIntent(ctx, bell.id)
+            val firePi = firePendingIntent(ctx, bell)
             am.setAlarmClock(AlarmManager.AlarmClockInfo(triggerAt, showPi), firePi)
         }
     }
@@ -67,11 +69,26 @@ object BellScheduler {
             .map { it to nextTriggerMillis(it) }
             .minByOrNull { it.second }
 
-    private fun firePendingIntent(ctx: Context, id: Long): PendingIntent {
+    private fun firePendingIntent(ctx: Context, bell: BellTime): PendingIntent {
         val intent = Intent(ctx, AlarmReceiver::class.java).apply {
             action = RING_ACTION
-            putExtra(EXTRA_BELL_ID, id)
-            // Unique data per bell so PendingIntents never collapse into one.
+            putExtra(EXTRA_BELL_ID, bell.id)
+            bell.talkUri?.let { putExtra(EXTRA_TALK_URI, it) }
+            bell.talkTitle?.let { putExtra(EXTRA_TALK_TITLE, it) }
+            // Unique data per item so PendingIntents never collapse into one.
+            data = Uri.parse("retreat://bell/${bell.id}")
+        }
+        return PendingIntent.getBroadcast(
+            ctx, bell.id.toInt(), intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+    }
+
+    /** Matches an existing alarm PendingIntent for cancellation. PendingIntent
+     *  equality ignores extras, so only action + data + request code must match. */
+    private fun cancelPendingIntent(ctx: Context, id: Long): PendingIntent {
+        val intent = Intent(ctx, AlarmReceiver::class.java).apply {
+            action = RING_ACTION
             data = Uri.parse("retreat://bell/$id")
         }
         return PendingIntent.getBroadcast(

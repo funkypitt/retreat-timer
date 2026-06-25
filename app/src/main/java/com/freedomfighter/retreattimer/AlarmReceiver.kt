@@ -20,6 +20,12 @@ class AlarmReceiver : BroadcastReceiver() {
 
         val serviceIntent = Intent(context, BellService::class.java).apply {
             putExtra(BellScheduler.EXTRA_BELL_ID, id)
+            intent.getStringExtra(BellScheduler.EXTRA_TALK_URI)?.let {
+                putExtra(BellScheduler.EXTRA_TALK_URI, it)
+            }
+            intent.getStringExtra(BellScheduler.EXTRA_TALK_TITLE)?.let {
+                putExtra(BellScheduler.EXTRA_TALK_TITLE, it)
+            }
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             ContextCompat.startForegroundService(context, serviceIntent)
