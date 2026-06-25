@@ -43,6 +43,7 @@ object BellStore {
     private const val KEY_NEXT_ID = "next_id"
     private const val KEY_ALARM_VOLUME = "alarm_volume" // -1 = leave system alarm volume untouched
     private const val KEY_KDRIVE_URL = "kdrive_url"
+    private const val KEY_BELL_SOUND = "bell_sound"
 
     private fun prefs(ctx: Context) =
         ctx.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -129,6 +130,13 @@ object BellStore {
 
     fun setAlarmVolume(ctx: Context, value: Int) {
         prefs(ctx).edit().putInt(KEY_ALARM_VOLUME, value).apply()
+    }
+
+    /** Key of the chosen bell sound (see [BellSounds]); defaults to the first. */
+    fun bellSoundKey(ctx: Context): String = prefs(ctx).getString(KEY_BELL_SOUND, "") ?: ""
+
+    fun setBellSoundKey(ctx: Context, key: String) {
+        prefs(ctx).edit().putString(KEY_BELL_SOUND, key).apply()
     }
 
     /** Last kDrive public-share link the teacher used, pre-filled next time. */

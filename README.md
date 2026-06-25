@@ -36,8 +36,12 @@ Keep the phone plugged in and the bells will play all day on their own.
 ./gradlew assembleDebug
 ```
 
-The bell recording (`app/src/main/res/raw/three_bells.mp3`) is three strikes of a
-singing bowl, each allowed to fade to barely audible before the next — human-paced.
+Three selectable bell sounds (`app/src/main/res/raw/bell_*.mp3`) — singing bell,
+Tibetan E♭ bowl, and gong bowl. Each is one bowl struck three times, the strike
+allowed to ring out **fully** before the next. All three are loudness-matched to
+−20 LUFS so switching changes only the timbre, not the volume. They are generated
+from the source samples in the repo root (linear gain to match loudness, then
+`ffmpeg concat` ×3).
 
 No ads, no tracking, no accounts. Permissions are limited to exact alarms, boot
 receipt, wake lock, foreground-service playback, and notifications.

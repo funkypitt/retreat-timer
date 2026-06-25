@@ -12,3 +12,6 @@
 
 # generated audio artifact (lives in app/src/main/res/raw)
 /three_bells.mp3
+
+# regenerable normalization intermediates
+/normalized-bowls/

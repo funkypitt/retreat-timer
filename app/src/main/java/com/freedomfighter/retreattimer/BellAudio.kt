@@ -13,7 +13,9 @@ import android.media.MediaPlayer
 object BellAudio {
     private var player: MediaPlayer? = null
 
-    fun playTest(ctx: Context) {
+    /** Test the bells at the exact alarm volume that will be used for real.
+     *  Defaults to the currently-selected sound, or a specific [rawRes] preview. */
+    fun playTest(ctx: Context, rawRes: Int = BellSounds.selected(ctx).rawRes) {
         stop()
         val desired = BellStore.alarmVolume(ctx)
         if (desired >= 0) {
@@ -29,7 +31,7 @@ object BellAudio {
                         .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
                         .build(),
                 )
-                val afd = ctx.resources.openRawResourceFd(R.raw.three_bells)
+                val afd = ctx.resources.openRawResourceFd(rawRes)
                 setDataSource(afd.fileDescriptor, afd.startOffset, afd.length)
                 afd.close()
                 setOnCompletionListener { stop() }

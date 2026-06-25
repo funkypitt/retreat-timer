@@ -153,6 +153,7 @@ private fun ScheduleTab() {
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         item { Spacer(Modifier.height(8.dp)); ReliabilityCard(tick) }
+        item { BellSoundCard() }
         item { VolumeCard() }
         item { NextBellLine(bells, tick) }
 
@@ -468,6 +469,52 @@ private fun ReliabilityCard(tick: Long) {
                     colors = ButtonDefaults.buttonColors(containerColor = WarnAmber),
                 ) { Text("Allow notifications") }
             }
+        }
+    }
+}
+
+/** Choose which bowl rings for every bell entry. All three are loudness-matched,
+ *  so switching is purely about timbre, not volume. Each plays three full strikes. */
+@Composable
+private fun BellSoundCard() {
+    val ctx = LocalContext.current
+    var selectedKey by remember { mutableStateOf(BellSounds.selected(ctx).key) }
+
+    Card(
+        colors = CardDefaults.cardColors(containerColor = CardBg),
+        shape = RoundedCornerShape(16.dp),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+            Text("Bell sound", fontWeight = FontWeight.SemiBold, color = Ink)
+            BellSounds.ALL.forEach { sound ->
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    RadioButton(
+                        selected = selectedKey == sound.key,
+                        onClick = {
+                            selectedKey = sound.key
+                            BellStore.setBellSoundKey(ctx, sound.key)
+                        },
+                        colors = RadioButtonDefaults.colors(selectedColor = Accent),
+                    )
+                    Text(
+                        sound.label,
+                        fontFamily = FontFamily.Serif, fontSize = 16.sp, color = Ink,
+                        modifier = Modifier.weight(1f),
+                    )
+                    TextButton(onClick = { BellAudio.playTest(ctx, sound.rawRes) }) {
+                        Icon(Icons.Filled.PlayArrow, contentDescription = "Preview", tint = Accent)
+                        Spacer(Modifier.width(2.dp)); Text("Preview", color = Accent)
+                    }
+                }
+            }
+            Text(
+                "Each bell rings the chosen bowl three times, letting it ring out fully between strikes.",
+                fontSize = 12.sp, color = Ink.copy(alpha = 0.6f), modifier = Modifier.padding(top = 2.dp),
+            )
         }
     }
 }

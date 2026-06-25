@@ -120,7 +120,7 @@ class BellService : Service() {
                 if (talkUri != null) {
                     setDataSource(this@BellService, Uri.parse(talkUri))
                 } else {
-                    val afd = resources.openRawResourceFd(R.raw.three_bells)
+                    val afd = resources.openRawResourceFd(BellSounds.selected(this@BellService).rawRes)
                     setDataSource(afd.fileDescriptor, afd.startOffset, afd.length)
                     afd.close()
                 }
