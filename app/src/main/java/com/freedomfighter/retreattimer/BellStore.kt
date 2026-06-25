@@ -3,6 +3,7 @@ package com.freedomfighter.retreattimer
 import android.content.Context
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.File
 
 /**
  * A scheduled playback at a wall-clock time of day. When [talkUri] is null it
@@ -41,6 +42,7 @@ object BellStore {
     private const val KEY_TALKS = "talks"
     private const val KEY_NEXT_ID = "next_id"
     private const val KEY_ALARM_VOLUME = "alarm_volume" // -1 = leave system alarm volume untouched
+    private const val KEY_KDRIVE_URL = "kdrive_url"
 
     private fun prefs(ctx: Context) =
         ctx.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -128,4 +130,15 @@ object BellStore {
     fun setAlarmVolume(ctx: Context, value: Int) {
         prefs(ctx).edit().putInt(KEY_ALARM_VOLUME, value).apply()
     }
+
+    /** Last kDrive public-share link the teacher used, pre-filled next time. */
+    fun kdriveUrl(ctx: Context): String = prefs(ctx).getString(KEY_KDRIVE_URL, "") ?: ""
+
+    fun setKdriveUrl(ctx: Context, url: String) {
+        prefs(ctx).edit().putString(KEY_KDRIVE_URL, url).apply()
+    }
+
+    /** Private folder where talks downloaded from kDrive are stored. Files here
+     *  are owned by the app, so scheduled playback never loses access to them. */
+    fun talksDir(ctx: Context): File = File(ctx.filesDir, "talks").apply { mkdirs() }
 }

@@ -21,14 +21,21 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -40,6 +47,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import java.io.File
 import java.util.concurrent.TimeUnit
 
 private val Paper = Color(0xFFF7F3EA)
@@ -255,6 +263,20 @@ private fun AddBellButton(bells: List<BellTime>, onAdd: (BellTime) -> Unit) {
 private fun LibraryTab(onGoToSchedule: () -> Unit) {
     val ctx = LocalContext.current
     var talks by remember { mutableStateOf(BellStore.loadTalks(ctx)) }
+    var showKDrive by remember { mutableStateOf(false) }
+
+    fun addTalk(talk: DharmaTalk) {
+        talks = talks + talk
+        BellStore.saveTalks(ctx, talks)
+    }
+
+    if (showKDrive) {
+        KDriveDialog(
+            existingTitles = talks.map { it.title }.toSet(),
+            onAdded = ::addTalk,
+            onDismiss = { showKDrive = false },
+        )
+    }
 
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
@@ -263,9 +285,7 @@ private fun LibraryTab(onGoToSchedule: () -> Unit) {
                 ctx.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
             val title = queryDisplayName(ctx, uri)
-            val talk = DharmaTalk(BellStore.nextId(ctx), uri.toString(), title)
-            talks = talks + talk
-            BellStore.saveTalks(ctx, talks)
+            addTalk(DharmaTalk(BellStore.nextId(ctx), uri.toString(), title))
         }
     }
 
@@ -299,8 +319,8 @@ private fun LibraryTab(onGoToSchedule: () -> Unit) {
         item {
             Spacer(Modifier.height(8.dp))
             Text(
-                "Add dharma talks from your phone, play them, or schedule one to play " +
-                    "at a set time — exactly like the bells.",
+                "Add dharma talks from your phone or a kDrive share link, play them, or " +
+                    "schedule one to play at a set time — exactly like the bells.",
                 fontSize = 13.sp, color = Ink.copy(alpha = 0.7f),
                 textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth(),
             )
@@ -310,11 +330,24 @@ private fun LibraryTab(onGoToSchedule: () -> Unit) {
                 onClick = { picker.launch(arrayOf("audio/*")) },
                 colors = ButtonDefaults.buttonColors(containerColor = Accent),
                 shape = RoundedCornerShape(16.dp),
-                modifier = Modifier.fillMaxWidth().height(56.dp),
+                modifier = Modifier.fillMaxWidth().height(52.dp),
             ) {
                 Icon(Icons.Filled.Add, contentDescription = null)
                 Spacer(Modifier.width(8.dp))
-                Text("Add dharma talk (pick MP3)", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                Text("Add from this phone (MP3)", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+            }
+        }
+        item {
+            OutlinedButton(
+                onClick = { showKDrive = true },
+                shape = RoundedCornerShape(16.dp),
+                border = ButtonDefaults.outlinedButtonBorder.copy(width = 2.dp),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = Accent),
+                modifier = Modifier.fillMaxWidth().height(52.dp),
+            ) {
+                Icon(Icons.Filled.CloudDownload, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text("Download from kDrive link", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
             }
         }
 
@@ -513,6 +546,149 @@ private fun FooterNote() {
         fontSize = 12.sp, color = Ink.copy(alpha = 0.55f), textAlign = TextAlign.Center,
         modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
     )
+}
+
+private val AUDIO_EXTS = setOf("mp3", "m4a", "aac", "wav", "ogg", "flac", "opus", "mp4")
+
+/**
+ * Paste a kDrive public-share link, list its audio files, and download the chosen
+ * ones into the app's private storage. Downloaded files become library talks whose
+ * uri is a local file:// path — owned by the app, so neither instant nor scheduled
+ * playback can ever lose access to them.
+ */
+@Composable
+private fun KDriveDialog(
+    existingTitles: Set<String>,
+    onAdded: (DharmaTalk) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
+
+    var url by remember { mutableStateOf(BellStore.kdriveUrl(ctx)) }
+    var config by remember { mutableStateOf<KDriveConfig?>(null) }
+    var files by remember { mutableStateOf<List<RemoteFile>>(emptyList()) }
+    var status by remember { mutableStateOf<String?>(null) }
+    var connecting by remember { mutableStateOf(false) }
+    var downloaded by remember { mutableStateOf(existingTitles) }   // titles already in library
+    var downloading by remember { mutableStateOf<Set<String>>(emptySet()) } // file ids in flight
+
+    fun connect() {
+        status = null
+        connecting = true
+        scope.launch {
+            val result = withContext(Dispatchers.IO) {
+                runCatching {
+                    val parsed = KDriveClient.parseShareUrl(url.trim())
+                        ?: throw IllegalArgumentException("Not a kDrive share link")
+                    val cfg = KDriveClient.init(parsed.first, parsed.second)
+                    val list = KDriveClient.listFiles(cfg)
+                        .filter { !it.isDir && it.name.substringAfterLast('.', "").lowercase() in AUDIO_EXTS }
+                    cfg to list
+                }
+            }
+            connecting = false
+            result.onSuccess { (cfg, list) ->
+                config = cfg
+                files = list
+                BellStore.setKdriveUrl(ctx, url.trim())
+                status = if (list.isEmpty()) "No audio files found in that share." else "${list.size} audio file(s) found."
+            }.onFailure { status = "Could not connect: ${it.message}" }
+        }
+    }
+
+    fun download(file: RemoteFile) {
+        val cfg = config ?: return
+        downloading = downloading + file.id
+        scope.launch {
+            val result = withContext(Dispatchers.IO) {
+                runCatching {
+                    val safe = file.name.replace(Regex("[^A-Za-z0-9._ -]"), "_")
+                    val dest = File(BellStore.talksDir(ctx), "${System.nanoTime()}_$safe")
+                    KDriveClient.downloadFile(cfg, file.id, dest)
+                    val title = file.name.substringBeforeLast('.').ifBlank { file.name }
+                    DharmaTalk(BellStore.nextId(ctx), Uri.fromFile(dest).toString(), title)
+                }
+            }
+            downloading = downloading - file.id
+            result.onSuccess { talk ->
+                onAdded(talk)
+                downloaded = downloaded + talk.title
+                status = "Added “${talk.title}”."
+            }.onFailure { status = "Download failed: ${it.message}" }
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Done", color = Accent) }
+        },
+        title = { Text("Download from kDrive", fontFamily = FontFamily.Serif, fontWeight = FontWeight.Bold) },
+        text = {
+            Column(Modifier.heightIn(max = 460.dp)) {
+                OutlinedTextField(
+                    value = url,
+                    onValueChange = { url = it },
+                    label = { Text("Public share link") },
+                    placeholder = { Text("https://kdrive.infomaniak.com/app/share/…") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(8.dp))
+                Button(
+                    onClick = { connect() },
+                    enabled = !connecting && url.isNotBlank(),
+                    colors = ButtonDefaults.buttonColors(containerColor = Accent),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    if (connecting) {
+                        CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = Color.White)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Connecting…")
+                    } else {
+                        Text("Connect")
+                    }
+                }
+                status?.let {
+                    Spacer(Modifier.height(8.dp))
+                    Text(it, fontSize = 12.sp, color = Ink.copy(alpha = 0.7f))
+                }
+                if (files.isNotEmpty()) {
+                    Spacer(Modifier.height(8.dp))
+                    Column(Modifier.verticalScroll(rememberScrollState())) {
+                        files.forEach { f ->
+                            val title = f.name.substringBeforeLast('.').ifBlank { f.name }
+                            val isHere = title in downloaded
+                            val isBusy = f.id in downloading
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                            ) {
+                                Column(Modifier.weight(1f)) {
+                                    Text(title, fontSize = 14.sp, color = Ink, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                                    Text(formatSize(f.size), fontSize = 11.sp, color = Ink.copy(alpha = 0.5f))
+                                }
+                                when {
+                                    isBusy -> CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.dp, color = Accent)
+                                    isHere -> Text("✓", color = GoodGreen, fontWeight = FontWeight.Bold, modifier = Modifier.padding(end = 12.dp))
+                                    else -> IconButton(onClick = { download(f) }) {
+                                        Icon(Icons.Filled.Download, contentDescription = "Download", tint = Accent)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+    )
+}
+
+private fun formatSize(bytes: Long): String = when {
+    bytes >= 1_000_000 -> "%.1f MB".format(bytes / 1_000_000.0)
+    bytes >= 1_000 -> "%.0f KB".format(bytes / 1_000.0)
+    else -> "$bytes B"
 }
 
 private fun pickTime(ctx: Context, hour: Int, minute: Int, onPicked: (Int, Int) -> Unit) {
