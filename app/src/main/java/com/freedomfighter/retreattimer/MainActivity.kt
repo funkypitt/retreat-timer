@@ -29,8 +29,10 @@ import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.LibraryMusic
+import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import kotlinx.coroutines.Dispatchers
@@ -105,7 +107,58 @@ private fun RetreatApp() {
                     text = { Text("Library", fontWeight = FontWeight.SemiBold) },
                     icon = { Icon(Icons.Filled.LibraryMusic, null) })
             }
-            if (tab == 0) ScheduleTab() else LibraryTab(onGoToSchedule = { tab = 0 })
+            Box(Modifier.weight(1f)) {
+                if (tab == 0) ScheduleTab() else LibraryTab(onGoToSchedule = { tab = 0 })
+            }
+            NowPlayingBar()
+        }
+    }
+}
+
+/** Persistent mini-player shown on both tabs whenever [BellService] is playing a
+ *  recording: title, progress, time remaining, and Play/Pause + Stop controls. */
+@Composable
+private fun NowPlayingBar() {
+    val ctx = LocalContext.current
+    val title = PlaybackState.title ?: return
+    val duration = PlaybackState.durationMs
+    val position = PlaybackState.positionMs
+    val playing = PlaybackState.isPlaying
+
+    Surface(color = Ink, modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(horizontal = 14.dp, vertical = 8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        title, color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 15.sp,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        if (duration > 0)
+                            "${formatClock(position)} / ${formatClock(duration)}  ·  ${formatClock(PlaybackState.remainingMs)} left"
+                        else "Playing…",
+                        color = Color.White.copy(alpha = 0.7f), fontSize = 12.sp,
+                    )
+                }
+                IconButton(onClick = { BellService.toggle(ctx) }) {
+                    Icon(
+                        if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                        contentDescription = if (playing) "Pause" else "Play",
+                        tint = Color.White,
+                    )
+                }
+                IconButton(onClick = { BellService.stop(ctx) }) {
+                    Icon(Icons.Filled.Stop, contentDescription = "Stop", tint = Color.White)
+                }
+            }
+            if (duration > 0) {
+                LinearProgressIndicator(
+                    progress = { position.toFloat() / duration.toFloat() },
+                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                    color = Color(0xFFE7C9A0),
+                    trackColor = Color.White.copy(alpha = 0.2f),
+                )
+            }
         }
     }
 }

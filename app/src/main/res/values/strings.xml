@@ -7,5 +7,7 @@
     <string name="ringing_text">Ringing the three bells…</string>
     <string name="playing_text">Playing dharma talk…</string>
     <string name="stop">Stop</string>
+    <string name="play">Play</string>
+    <string name="pause">Pause</string>
     <string name="ic_launcher_background">#F7F3EA</string>
 </resources>
