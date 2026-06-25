@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Retreat Timer</string>
+    <string name="channel_ringing">Bell ringing</string>
+    <string name="channel_ringing_desc">Plays the three bells at scheduled times.</string>
+    <string name="ringing_title">Retreat Timer</string>
+    <string name="ringing_text">Ringing the three bells…</string>
+    <string name="ic_launcher_background">#F7F3EA</string>
+</resources>
