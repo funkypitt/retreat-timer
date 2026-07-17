@@ -31,6 +31,7 @@ import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.RssFeed
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.*
@@ -318,6 +319,7 @@ private fun LibraryTab(onGoToSchedule: () -> Unit) {
     val ctx = LocalContext.current
     var talks by remember { mutableStateOf(BellStore.loadTalks(ctx)) }
     var showKDrive by remember { mutableStateOf(false) }
+    var showPodcast by remember { mutableStateOf(false) }
 
     fun addTalk(talk: DharmaTalk) {
         talks = talks + talk
@@ -329,6 +331,14 @@ private fun LibraryTab(onGoToSchedule: () -> Unit) {
             existingTitles = talks.map { it.title }.toSet(),
             onAdded = ::addTalk,
             onDismiss = { showKDrive = false },
+        )
+    }
+
+    if (showPodcast) {
+        PodcastDialog(
+            existingTitles = talks.map { it.title }.toSet(),
+            onAdded = ::addTalk,
+            onDismiss = { showPodcast = false },
         )
     }
 
@@ -373,8 +383,8 @@ private fun LibraryTab(onGoToSchedule: () -> Unit) {
         item {
             Spacer(Modifier.height(8.dp))
             Text(
-                "Add dharma talks from your phone or a kDrive share link, play them, or " +
-                    "schedule one to play at a set time — exactly like the bells.",
+                "Add dharma talks from your phone, a kDrive share link or a podcast feed, " +
+                    "play them, or schedule one to play at a set time — exactly like the bells.",
                 fontSize = 13.sp, color = Ink.copy(alpha = 0.7f),
                 textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth(),
             )
@@ -402,6 +412,19 @@ private fun LibraryTab(onGoToSchedule: () -> Unit) {
                 Icon(Icons.Filled.CloudDownload, contentDescription = null)
                 Spacer(Modifier.width(8.dp))
                 Text("Download from kDrive link", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+            }
+        }
+        item {
+            OutlinedButton(
+                onClick = { showPodcast = true },
+                shape = RoundedCornerShape(16.dp),
+                border = ButtonDefaults.outlinedButtonBorder.copy(width = 2.dp),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = Accent),
+                modifier = Modifier.fillMaxWidth().height(52.dp),
+            ) {
+                Icon(Icons.Filled.RssFeed, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text("Download from podcast feed", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
             }
         }
 
@@ -785,10 +808,152 @@ private fun KDriveDialog(
     )
 }
 
+/**
+ * Paste a podcast RSS feed URL, list its episodes, and download the chosen ones
+ * into the app's private storage. Downloaded episodes become library talks whose
+ * uri is a local file:// path — owned by the app, so neither instant nor scheduled
+ * playback can ever lose access to them. Enclosure URLs may redirect or carry query
+ * strings; [Http] follows redirects.
+ */
+@Composable
+private fun PodcastDialog(
+    existingTitles: Set<String>,
+    onAdded: (DharmaTalk) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
+
+    var url by remember { mutableStateOf(BellStore.podcastUrl(ctx)) }
+    var episodes by remember { mutableStateOf<List<Episode>>(emptyList()) }
+    var status by remember { mutableStateOf<String?>(null) }
+    var fetching by remember { mutableStateOf(false) }
+    var downloaded by remember { mutableStateOf(existingTitles) }   // titles already in library
+    var downloading by remember { mutableStateOf<Set<String>>(emptySet()) } // episode urls in flight
+
+    fun fetch() {
+        status = null
+        fetching = true
+        scope.launch {
+            val result = withContext(Dispatchers.IO) {
+                runCatching { PodcastClient.fetch(url.trim()) }
+            }
+            fetching = false
+            result.onSuccess { list ->
+                episodes = list
+                BellStore.setPodcastUrl(ctx, url.trim())
+                status = if (list.isEmpty()) "No episodes found in that feed." else "${list.size} episode(s) found."
+            }.onFailure { status = "Could not read the feed: ${it.message}" }
+        }
+    }
+
+    fun download(ep: Episode) {
+        downloading = downloading + ep.url
+        scope.launch {
+            val result = withContext(Dispatchers.IO) {
+                runCatching {
+                    val ext = ep.url.substringBefore('?').substringAfterLast('.', "")
+                        .takeIf { it.length in 2..4 && it.all(Char::isLetterOrDigit) }?.lowercase() ?: "mp3"
+                    val safe = ep.title.replace(Regex("[^A-Za-z0-9._ -]"), "_").take(80)
+                    val dest = File(BellStore.talksDir(ctx), "${System.nanoTime()}_$safe.$ext")
+                    Http.download(ep.url, dest)
+                    DharmaTalk(BellStore.nextId(ctx), Uri.fromFile(dest).toString(), ep.title)
+                }
+            }
+            downloading = downloading - ep.url
+            result.onSuccess { talk ->
+                onAdded(talk)
+                downloaded = downloaded + talk.title
+                status = "Added “${talk.title}”."
+            }.onFailure { status = "Download failed: ${it.message}" }
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Done", color = Accent) }
+        },
+        title = { Text("Download from podcast feed", fontFamily = FontFamily.Serif, fontWeight = FontWeight.Bold) },
+        text = {
+            Column(Modifier.heightIn(max = 460.dp)) {
+                OutlinedTextField(
+                    value = url,
+                    onValueChange = { url = it },
+                    label = { Text("Feed URL") },
+                    placeholder = { Text("https://…/feeds/teacher.xml") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(8.dp))
+                Button(
+                    onClick = { fetch() },
+                    enabled = !fetching && url.isNotBlank(),
+                    colors = ButtonDefaults.buttonColors(containerColor = Accent),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    if (fetching) {
+                        CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = Color.White)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Fetching…")
+                    } else {
+                        Text("Fetch episodes")
+                    }
+                }
+                status?.let {
+                    Spacer(Modifier.height(8.dp))
+                    Text(it, fontSize = 12.sp, color = Ink.copy(alpha = 0.7f))
+                }
+                if (episodes.isNotEmpty()) {
+                    Spacer(Modifier.height(8.dp))
+                    Column(Modifier.verticalScroll(rememberScrollState())) {
+                        episodes.forEach { ep ->
+                            val isHere = ep.title in downloaded
+                            val isBusy = ep.url in downloading
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                            ) {
+                                Column(Modifier.weight(1f)) {
+                                    Text(ep.title, fontSize = 14.sp, color = Ink, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                                    val meta = listOfNotNull(
+                                        formatDuration(ep.durationMs).ifBlank { null },
+                                        formatSize(ep.sizeBytes).takeIf { ep.sizeBytes > 0 },
+                                    ).joinToString("  ·  ")
+                                    if (meta.isNotEmpty()) {
+                                        Text(meta, fontSize = 11.sp, color = Ink.copy(alpha = 0.5f))
+                                    }
+                                }
+                                when {
+                                    isBusy -> CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.dp, color = Accent)
+                                    isHere -> Text("✓", color = GoodGreen, fontWeight = FontWeight.Bold, modifier = Modifier.padding(end = 12.dp))
+                                    else -> IconButton(onClick = { download(ep) }) {
+                                        Icon(Icons.Filled.Download, contentDescription = "Download", tint = Accent)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+    )
+}
+
 private fun formatSize(bytes: Long): String = when {
     bytes >= 1_000_000 -> "%.1f MB".format(bytes / 1_000_000.0)
     bytes >= 1_000 -> "%.0f KB".format(bytes / 1_000.0)
     else -> "$bytes B"
+}
+
+/** "1h 05m", "39m 55s", "" for 0/unknown. */
+private fun formatDuration(ms: Long): String {
+    if (ms <= 0) return ""
+    val totalSec = ms / 1000
+    val h = totalSec / 3600
+    val m = (totalSec % 3600) / 60
+    val s = totalSec % 60
+    return if (h > 0) "%dh %02dm".format(h, m) else "%dm %02ds".format(m, s)
 }
 
 private fun pickTime(ctx: Context, hour: Int, minute: Int, onPicked: (Int, Int) -> Unit) {

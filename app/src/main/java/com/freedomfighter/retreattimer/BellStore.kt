@@ -43,6 +43,7 @@ object BellStore {
     private const val KEY_NEXT_ID = "next_id"
     private const val KEY_ALARM_VOLUME = "alarm_volume" // -1 = leave system alarm volume untouched
     private const val KEY_KDRIVE_URL = "kdrive_url"
+    private const val KEY_PODCAST_URL = "podcast_url"
     private const val KEY_BELL_SOUND = "bell_sound"
 
     private fun prefs(ctx: Context) =
@@ -144,6 +145,13 @@ object BellStore {
 
     fun setKdriveUrl(ctx: Context, url: String) {
         prefs(ctx).edit().putString(KEY_KDRIVE_URL, url).apply()
+    }
+
+    /** Last podcast RSS feed URL the teacher used, pre-filled next time. */
+    fun podcastUrl(ctx: Context): String = prefs(ctx).getString(KEY_PODCAST_URL, "") ?: ""
+
+    fun setPodcastUrl(ctx: Context, url: String) {
+        prefs(ctx).edit().putString(KEY_PODCAST_URL, url).apply()
     }
 
     /** Private folder where talks downloaded from kDrive are stored. Files here
