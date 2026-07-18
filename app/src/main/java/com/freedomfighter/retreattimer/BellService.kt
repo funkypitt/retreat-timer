@@ -62,7 +62,7 @@ class BellService : Service() {
 
         startBellForeground(NOTIF_ID, buildNotification(playing = true, position = 0, duration = 0))
         acquireStartupLock()
-        applyAlarmVolume()
+        applyVolume(isTalk = talkUri != null)
 
         runCatching {
             player = MediaPlayer().apply {
@@ -198,9 +198,11 @@ class BellService : Service() {
     }
 
     /** Force STREAM_ALARM to the level the teacher tested with, so what they heard
-     *  when pressing "Test" is exactly what the room hears now. */
-    private fun applyAlarmVolume() {
-        val desired = BellStore.alarmVolume(this)
+     *  when pressing "Test" is exactly what the room hears now. Talks and bells
+     *  carry their own levels — a spoken recording normally needs to be much
+     *  louder than a bowl strike to fill the same room. */
+    private fun applyVolume(isTalk: Boolean) {
+        val desired = if (isTalk) BellStore.talkVolume(this) else BellStore.alarmVolume(this)
         if (desired < 0) return
         val am = getSystemService(Context.AUDIO_SERVICE) as AudioManager
         val max = am.getStreamMaxVolume(AudioManager.STREAM_ALARM)

@@ -42,6 +42,7 @@ object BellStore {
     private const val KEY_TALKS = "talks"
     private const val KEY_NEXT_ID = "next_id"
     private const val KEY_ALARM_VOLUME = "alarm_volume" // -1 = leave system alarm volume untouched
+    private const val KEY_TALK_VOLUME = "talk_volume"   // -1 = leave system alarm volume untouched
     private const val KEY_KDRIVE_URL = "kdrive_url"
     private const val KEY_PODCAST_URL = "podcast_url"
     private const val KEY_BELL_SOUND = "bell_sound"
@@ -126,11 +127,23 @@ object BellStore {
      *  cancel alarms for items that have since been deleted. */
     fun highWatermarkId(ctx: Context): Long = prefs(ctx).getLong(KEY_NEXT_ID, 1L)
 
-    /** Desired STREAM_ALARM volume, or -1 to leave whatever the system has. */
+    /** Desired STREAM_ALARM volume for the bells, or -1 to leave whatever the
+     *  system has. Talks have their own level — see [talkVolume]. */
     fun alarmVolume(ctx: Context): Int = prefs(ctx).getInt(KEY_ALARM_VOLUME, -1)
 
     fun setAlarmVolume(ctx: Context, value: Int) {
         prefs(ctx).edit().putInt(KEY_ALARM_VOLUME, value).apply()
+    }
+
+    /** Desired STREAM_ALARM volume for dharma talks, or -1 to leave whatever the
+     *  system has. Spoken recordings usually need to be markedly louder than a
+     *  bowl strike to carry across a hall, so this is set independently of the
+     *  bells. Until the teacher sets it, it follows the bell level — which is
+     *  what talks used before the two were split, so upgrading changes nothing. */
+    fun talkVolume(ctx: Context): Int = prefs(ctx).getInt(KEY_TALK_VOLUME, alarmVolume(ctx))
+
+    fun setTalkVolume(ctx: Context, value: Int) {
+        prefs(ctx).edit().putInt(KEY_TALK_VOLUME, value).apply()
     }
 
     /** Key of the chosen bell sound (see [BellSounds]); defaults to the first. */

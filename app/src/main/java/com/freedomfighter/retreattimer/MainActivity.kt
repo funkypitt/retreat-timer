@@ -1,7 +1,6 @@
 package com.freedomfighter.retreattimer
 
 import android.Manifest
-import android.app.TimePickerDialog
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -28,6 +27,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Keyboard
 import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
@@ -49,6 +49,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.ContextCompat
 import java.io.File
 import java.util.concurrent.TimeUnit
@@ -191,7 +193,9 @@ private fun Header() {
 private fun ScheduleTab() {
     val ctx = LocalContext.current
     var bells by remember { mutableStateOf(BellStore.load(ctx)) }
+    val talks = remember { BellStore.loadTalks(ctx) }
     var tick by remember { mutableStateOf(0L) }
+    var timeRequest by remember { mutableStateOf<TimeRequest?>(null) }
     LaunchedEffect(Unit) {
         while (true) { tick = System.currentTimeMillis(); kotlinx.coroutines.delay(30_000) }
     }
@@ -202,13 +206,23 @@ private fun ScheduleTab() {
         BellScheduler.rescheduleAll(ctx)
     }
 
+    timeRequest?.let { req ->
+        TimeDialog(
+            initialHour = req.hour,
+            initialMinute = req.minute,
+            onDismiss = { timeRequest = null },
+            onPicked = { h, m -> timeRequest = null; req.onPicked(h, m) },
+        )
+    }
+
     LazyColumn(
         modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         item { Spacer(Modifier.height(8.dp)); ReliabilityCard(tick) }
         item { BellSoundCard() }
-        item { VolumeCard() }
+        item { BellVolumeCard() }
+        item { TalkVolumeCard(bells, talks, tick) }
         item { NextBellLine(bells, tick) }
 
         items(bells, key = { it.id }) { bell ->
@@ -216,7 +230,7 @@ private fun ScheduleTab() {
                 bell = bell,
                 onToggle = { persist(bells.map { if (it.id == bell.id) it.copy(enabled = !it.enabled) else it }) },
                 onEdit = {
-                    pickTime(ctx, bell.hour, bell.minute) { h, m ->
+                    timeRequest = TimeRequest(bell.hour, bell.minute) { h, m ->
                         persist(bells.map { if (it.id == bell.id) it.copy(hour = h, minute = m) else it })
                     }
                 },
@@ -228,7 +242,16 @@ private fun ScheduleTab() {
             )
         }
 
-        item { AddBellButton(bells) { newBell -> persist(bells + newBell) } }
+        item {
+            AddBellButton(bells.isEmpty()) {
+                // Seeded with the current time, never an offset from the last bell:
+                // every bell is a time the teacher chose on purpose.
+                val (h, m) = nowHourMinute()
+                timeRequest = TimeRequest(h, m) { ph, pm ->
+                    persist(bells + BellTime(id = BellStore.nextId(ctx), hour = ph, minute = pm, enabled = true))
+                }
+            }
+        }
         item { FooterNote() }
         item { Spacer(Modifier.height(24.dp)) }
     }
@@ -284,21 +307,13 @@ private fun ScheduleRow(
     }
 }
 
-/** The "+" that drops the next bell exactly one hour after the last (07:45 →
- *  08:45). With no bells yet it seeds a sensible 07:00. */
+/** Opens the time picker so the teacher chooses the time for every bell. It
+ *  deliberately offers no default offset — a retreat schedule is rarely evenly
+ *  spaced, so a guessed time would only have to be corrected. */
 @Composable
-private fun AddBellButton(bells: List<BellTime>, onAdd: (BellTime) -> Unit) {
-    val ctx = LocalContext.current
+private fun AddBellButton(isFirst: Boolean, onClick: () -> Unit) {
     Button(
-        onClick = {
-            val (h, m) = if (bells.isEmpty()) {
-                7 to 0
-            } else {
-                val last = bells.maxByOrNull { it.minuteOfDay }!!
-                ((last.hour + 1) % 24) to last.minute
-            }
-            onAdd(BellTime(id = BellStore.nextId(ctx), hour = h, minute = m, enabled = true))
-        },
+        onClick = onClick,
         colors = ButtonDefaults.buttonColors(containerColor = Accent),
         shape = RoundedCornerShape(16.dp),
         modifier = Modifier.fillMaxWidth().height(56.dp),
@@ -306,7 +321,7 @@ private fun AddBellButton(bells: List<BellTime>, onAdd: (BellTime) -> Unit) {
         Icon(Icons.Filled.Add, contentDescription = null)
         Spacer(Modifier.width(8.dp))
         Text(
-            if (bells.isEmpty()) "Add first bell" else "Add bell (1 hour later)",
+            if (isFirst) "Add first bell" else "Add bell",
             fontSize = 16.sp, fontWeight = FontWeight.SemiBold,
         )
     }
@@ -320,6 +335,16 @@ private fun LibraryTab(onGoToSchedule: () -> Unit) {
     var talks by remember { mutableStateOf(BellStore.loadTalks(ctx)) }
     var showKDrive by remember { mutableStateOf(false) }
     var showPodcast by remember { mutableStateOf(false) }
+    var timeRequest by remember { mutableStateOf<TimeRequest?>(null) }
+
+    timeRequest?.let { req ->
+        TimeDialog(
+            initialHour = req.hour,
+            initialMinute = req.minute,
+            onDismiss = { timeRequest = null },
+            onPicked = { h, m -> timeRequest = null; req.onPicked(h, m) },
+        )
+    }
 
     fun addTalk(talk: DharmaTalk) {
         talks = talks + talk
@@ -363,8 +388,8 @@ private fun LibraryTab(onGoToSchedule: () -> Unit) {
     }
 
     fun scheduleTalk(talk: DharmaTalk) {
-        val now = java.util.Calendar.getInstance()
-        pickTime(ctx, now.get(java.util.Calendar.HOUR_OF_DAY), 0) { h, m ->
+        val (nowH, nowM) = nowHourMinute()
+        timeRequest = TimeRequest(nowH, nowM) { h, m ->
             val item = BellTime(
                 id = BellStore.nextId(ctx), hour = h, minute = m, enabled = true,
                 talkUri = talk.uri, talkTitle = talk.title,
@@ -595,16 +620,66 @@ private fun BellSoundCard() {
     }
 }
 
-/** Alarm-volume slider. Both live playback and the Test/Play buttons use this
- *  exact level, so the slider is a true preview of room loudness. */
+/** Bell-volume slider. Live ringing and the Test/Play buttons use this exact
+ *  level, so the slider is a true preview of room loudness. */
 @Composable
-private fun VolumeCard() {
+private fun BellVolumeCard() {
+    val ctx = LocalContext.current
+    VolumeCard(
+        title = "Bell volume",
+        testLabel = "Test bells",
+        hint = "Every bell rings at this exact level. Press Test bells to hear it.",
+        stored = BellStore.alarmVolume(ctx),
+        onStore = { BellStore.setAlarmVolume(ctx, it) },
+        onTest = { BellAudio.playTest(ctx) },
+    )
+}
+
+/** Talk volume, deliberately separate from the bells: a spoken recording has to
+ *  carry across the hall where a bowl strike only has to be noticed, so the two
+ *  levels are almost never the same. Test plays a real talk — the next one
+ *  scheduled if there is one — because speech is what has to be judged, and the
+ *  slider keeps working while it plays. */
+@Composable
+private fun TalkVolumeCard(bells: List<BellTime>, talks: List<DharmaTalk>, tick: Long) {
+    val ctx = LocalContext.current
+    val sample = remember(bells, talks, tick) {
+        bells.filter { it.isTalk && it.enabled }
+            .minByOrNull { BellScheduler.nextTriggerMillis(it) }
+            ?.let { it.talkUri!! to (it.talkTitle ?: "Dharma talk") }
+            ?: talks.firstOrNull()?.let { it.uri to it.title }
+    }
+    VolumeCard(
+        title = "Talk volume",
+        testLabel = "Test talk",
+        hint = if (sample != null) {
+            "Dharma talks play at this level — set higher than the bells if speech " +
+                "has to carry. Test plays “${sample.second}”; adjust while it runs."
+        } else {
+            "Dharma talks play at this level, separately from the bells. Add a talk " +
+                "in the Library tab to test it."
+        },
+        stored = BellStore.talkVolume(ctx),
+        onStore = { BellStore.setTalkVolume(ctx, it) },
+        onTest = sample?.let { (uri, title) -> { BellService.playTalk(ctx, uri, title) } },
+    )
+}
+
+/** Shared slider card: writes the chosen level straight to STREAM_ALARM so what
+ *  is heard while dragging is what the room will hear. */
+@Composable
+private fun VolumeCard(
+    title: String,
+    testLabel: String,
+    hint: String,
+    stored: Int,
+    onStore: (Int) -> Unit,
+    onTest: (() -> Unit)?,
+) {
     val ctx = LocalContext.current
     val am = ctx.getSystemService(Context.AUDIO_SERVICE) as AudioManager
     val max = am.getStreamMaxVolume(AudioManager.STREAM_ALARM)
-    val initial = BellStore.alarmVolume(ctx).let {
-        if (it < 0) am.getStreamVolume(AudioManager.STREAM_ALARM) else it
-    }
+    val initial = if (stored < 0) am.getStreamVolume(AudioManager.STREAM_ALARM) else stored
     var vol by remember { mutableStateOf(initial.toFloat()) }
 
     Card(
@@ -614,10 +689,10 @@ private fun VolumeCard() {
     ) {
         Column(Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Volume", fontWeight = FontWeight.SemiBold, color = Ink, modifier = Modifier.weight(1f))
-                TextButton(onClick = { BellAudio.playTest(ctx) }) {
+                Text(title, fontWeight = FontWeight.SemiBold, color = Ink, modifier = Modifier.weight(1f))
+                TextButton(onClick = { onTest?.invoke() }, enabled = onTest != null) {
                     Icon(Icons.Filled.PlayArrow, contentDescription = null, tint = Accent)
-                    Spacer(Modifier.width(4.dp)); Text("Test bells", color = Accent)
+                    Spacer(Modifier.width(4.dp)); Text(testLabel, color = Accent)
                 }
             }
             Slider(
@@ -625,17 +700,14 @@ private fun VolumeCard() {
                 onValueChange = {
                     vol = it
                     val v = it.toInt().coerceIn(0, max)
-                    BellStore.setAlarmVolume(ctx, v)
+                    onStore(v)
                     am.setStreamVolume(AudioManager.STREAM_ALARM, v, 0)
                 },
                 valueRange = 0f..max.toFloat(),
                 steps = (max - 1).coerceAtLeast(0),
                 colors = SliderDefaults.colors(thumbColor = Accent, activeTrackColor = Accent),
             )
-            Text(
-                "Bells and talks play at this exact level. Press Test bells to hear it.",
-                fontSize = 12.sp, color = Ink.copy(alpha = 0.6f),
-            )
+            Text(hint, fontSize = 12.sp, color = Ink.copy(alpha = 0.6f))
         }
     }
 }
@@ -956,11 +1028,70 @@ private fun formatDuration(ms: Long): String {
     return if (h > 0) "%dh %02dm".format(h, m) else "%dm %02ds".format(m, s)
 }
 
-private fun pickTime(ctx: Context, hour: Int, minute: Int, onPicked: (Int, Int) -> Unit) {
-    TimePickerDialog(
-        ctx, { _, h, m -> onPicked(h, m) },
-        hour, minute, DateFormat.is24HourFormat(ctx),
-    ).show()
+/** A pending "pick a time" interaction: what to seed the picker with, and what to
+ *  do with the answer. Held in state so the Compose dialog can be shown. */
+private data class TimeRequest(val hour: Int, val minute: Int, val onPicked: (Int, Int) -> Unit)
+
+private fun nowHourMinute(): Pair<Int, Int> {
+    val c = java.util.Calendar.getInstance()
+    return c.get(java.util.Calendar.HOUR_OF_DAY) to c.get(java.util.Calendar.MINUTE)
+}
+
+/**
+ * Time picker that accepts any minute. It opens in keyboard-entry mode so an
+ * exact time like 06:47 is simply typed — the platform dial snaps to 5-minute
+ * steps when tapped, which is what made odd times awkward to set. The dial is
+ * still one tap away for anyone who prefers it.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun TimeDialog(
+    initialHour: Int,
+    initialMinute: Int,
+    onDismiss: () -> Unit,
+    onPicked: (Int, Int) -> Unit,
+) {
+    val ctx = LocalContext.current
+    val state = rememberTimePickerState(
+        initialHour = initialHour,
+        initialMinute = initialMinute,
+        is24Hour = DateFormat.is24HourFormat(ctx),
+    )
+    var typing by remember { mutableStateOf(true) }
+
+    // A plain Dialog rather than AlertDialog: the dial is wider than the platform
+    // default dialog width and would be clipped inside one.
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Surface(shape = RoundedCornerShape(24.dp), color = CardBg, tonalElevation = 6.dp) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.padding(20.dp).verticalScroll(rememberScrollState()),
+            ) {
+                Text(
+                    "Pick a time",
+                    fontFamily = FontFamily.Serif, fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp, color = Ink,
+                )
+                Spacer(Modifier.height(16.dp))
+                if (typing) TimeInput(state = state) else TimePicker(state = state)
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                    TextButton(onClick = { typing = !typing }) {
+                        Icon(
+                            if (typing) Icons.Filled.Schedule else Icons.Filled.Keyboard,
+                            contentDescription = null, tint = Accent,
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(if (typing) "Dial" else "Type", color = Accent)
+                    }
+                    Spacer(Modifier.weight(1f))
+                    TextButton(onClick = onDismiss) { Text("Cancel", color = Ink.copy(alpha = 0.6f)) }
+                    TextButton(onClick = { onPicked(state.hour, state.minute) }) {
+                        Text("Set", color = Accent, fontWeight = FontWeight.SemiBold)
+                    }
+                }
+            }
+        }
+    }
 }
 
 /** Human-readable name for a picked file, with the .mp3 extension stripped. */

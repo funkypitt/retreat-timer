@@ -11,6 +11,7 @@ object BellSounds {
         BellSound("singing", "Singing bell", R.raw.bell_singing),
         BellSound("eflat", "Tibetan bowl (E♭)", R.raw.bell_eflat),
         BellSound("gong", "Gong bowl", R.raw.bell_gong),
+        BellSound("satipanya", "Satipanya", R.raw.bell_satipanya),
     )
 
     /** The teacher's chosen sound, falling back to the first. */

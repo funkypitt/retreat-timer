@@ -21,12 +21,14 @@ screen, deep sleep, Doze, hours unattended.
 
 ## Using it
 
-1. Tap **Add first bell**, then tap a time to edit it.
-2. Tap **+ Add bell (1 hour later)** to drop the next ring exactly one hour after
-   the last (e.g. 07:45 → 08:45). Edit any time by tapping it.
-3. Use the **▶ Test** button (per bell, or on the volume card) to hear the three
-   bells at the exact volume the room will hear.
-4. Toggle any bell on/off; the schedule repeats every day.
+1. Tap **Add bell** and pick the time. The picker opens ready for typing, so any
+   minute (06:47, not just 06:45) is set directly; a dial is one tap away.
+2. Edit any time by tapping it. Toggle any bell on/off; the schedule repeats
+   every day.
+3. **Bell volume** and **Talk volume** are set separately — a spoken recording
+   normally has to be much louder than a bowl strike to fill the same room. Each
+   card has its own **▶ Test** button, and **Test talk** plays the talk that is
+   actually coming up next, so the level can be judged on real speech.
 
 Keep the phone plugged in and the bells will play all day on their own.
 
@@ -36,12 +38,25 @@ Keep the phone plugged in and the bells will play all day on their own.
 ./gradlew assembleDebug
 ```
 
-Three selectable bell sounds (`app/src/main/res/raw/bell_*.mp3`) — singing bell,
-Tibetan E♭ bowl, and gong bowl. Each is one bowl struck three times, the strike
-allowed to ring out **fully** before the next. All three are loudness-matched to
-−20 LUFS so switching changes only the timbre, not the volume. They are generated
-from the source samples in the repo root (linear gain to match loudness, then
-`ffmpeg concat` ×3).
+Four selectable bell sounds (`app/src/main/res/raw/bell_*.mp3`) — singing bell,
+Tibetan E♭ bowl, gong bowl, and Satipanya. Each is one bowl struck three times,
+the strike allowed to ring out **fully** before the next. All four are
+loudness-matched to −20 LUFS so switching changes only the timbre, not the volume.
+
+The first three are generated from the source samples in the repo root (linear
+gain to match loudness, then `ffmpeg concat` ×3). Satipanya comes from
+`Satipanya-3-bells.mp3`, which is already a natural three-strike recording, so it
+is used whole rather than concatenated — only gained to match, trimmed of its
+15 s of trailing silence, and converted to stereo:
+
+```
+ffmpeg -i Satipanya-3-bells.mp3 \
+  -af "volume=19.0dB,atrim=0:71.5,afade=t=out:st=70.5:d=1.0,aformat=channel_layouts=stereo" \
+  -ar 44100 -b:a 192k app/src/main/res/raw/bell_satipanya.mp3
+```
+
+Its strikes are spaced further apart than the other three — that is how the
+recording was made, and it is kept.
 
 No ads, no tracking, no accounts. Permissions are limited to exact alarms, boot
 receipt, wake lock, foreground-service playback, and notifications.
