@@ -19,6 +19,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -27,12 +28,15 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Forward10
 import androidx.compose.material.icons.filled.Keyboard
 import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Replay10
 import androidx.compose.material.icons.filled.RssFeed
 import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -118,8 +122,13 @@ private fun RetreatApp() {
     }
 }
 
-/** Persistent mini-player shown on both tabs whenever [BellService] is playing a
- *  recording: title, progress, time remaining, and Play/Pause + Stop controls. */
+/**
+ * Persistent mini-player shown on both tabs whenever [BellService] is playing.
+ * The progress bar is draggable, which is the point: dharma talks often open
+ * with several minutes of silence, and checking that the volume carries means
+ * reaching the speech without sitting through the gap. ±10s and restart handle
+ * the fine adjustments once you are there.
+ */
 @Composable
 private fun NowPlayingBar() {
     val ctx = LocalContext.current
@@ -128,39 +137,79 @@ private fun NowPlayingBar() {
     val position = PlaybackState.positionMs
     val playing = PlaybackState.isPlaying
 
+    // While a drag is in progress the thumb follows the finger, not the ticker,
+    // which would otherwise yank it back twice a second.
+    var scrubMs by remember { mutableStateOf<Int?>(null) }
+    val shown = scrubMs ?: position
+    val remaining = (duration - shown).coerceAtLeast(0)
+
     Surface(color = Ink, modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(horizontal = 14.dp, vertical = 8.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
+            Text(
+                title, color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 15.sp,
+                maxLines = 1, overflow = TextOverflow.Ellipsis,
+            )
+            if (duration > 0) {
+                Slider(
+                    value = shown.toFloat(),
+                    onValueChange = { scrubMs = it.toInt() },
+                    onValueChangeFinished = {
+                        scrubMs?.let { BellService.seekTo(ctx, it) }
+                        scrubMs = null
+                    },
+                    valueRange = 0f..duration.toFloat(),
+                    colors = SliderDefaults.colors(
+                        thumbColor = Color(0xFFE7C9A0),
+                        activeTrackColor = Color(0xFFE7C9A0),
+                        inactiveTrackColor = Color.White.copy(alpha = 0.25f),
+                    ),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Row(Modifier.fillMaxWidth()) {
                     Text(
-                        title, color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 15.sp,
-                        maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        "${formatClock(shown)} elapsed",
+                        color = Color.White.copy(alpha = 0.7f),
+                        fontFamily = FontFamily.Monospace, fontSize = 12.sp,
                     )
+                    Spacer(Modifier.weight(1f))
                     Text(
-                        if (duration > 0)
-                            "${formatClock(position)} / ${formatClock(duration)}  ·  ${formatClock(PlaybackState.remainingMs)} left"
-                        else "Playing…",
-                        color = Color.White.copy(alpha = 0.7f), fontSize = 12.sp,
+                        "−${formatClock(remaining)} left",
+                        color = Color(0xFFE7C9A0),
+                        fontFamily = FontFamily.Monospace, fontSize = 12.sp,
                     )
                 }
-                IconButton(onClick = { BellService.toggle(ctx) }) {
+            } else {
+                Text("Playing…", color = Color.White.copy(alpha = 0.7f), fontSize = 12.sp)
+            }
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                IconButton(onClick = { BellService.restart(ctx) }) {
+                    Icon(Icons.Filled.SkipPrevious, "Back to beginning", tint = Color.White)
+                }
+                IconButton(onClick = { BellService.back10(ctx) }) {
+                    Icon(Icons.Filled.Replay10, "Back 10 seconds", tint = Color.White)
+                }
+                FilledIconButton(
+                    onClick = { BellService.toggle(ctx) },
+                    shape = CircleShape,
+                    colors = IconButtonDefaults.filledIconButtonColors(containerColor = Accent),
+                    modifier = Modifier.size(48.dp),
+                ) {
                     Icon(
                         if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow,
                         contentDescription = if (playing) "Pause" else "Play",
-                        tint = Color.White,
+                        tint = Color.White, modifier = Modifier.size(28.dp),
                     )
+                }
+                IconButton(onClick = { BellService.fwd10(ctx) }) {
+                    Icon(Icons.Filled.Forward10, "Forward 10 seconds", tint = Color.White)
                 }
                 IconButton(onClick = { BellService.stop(ctx) }) {
                     Icon(Icons.Filled.Stop, contentDescription = "Stop", tint = Color.White)
                 }
-            }
-            if (duration > 0) {
-                LinearProgressIndicator(
-                    progress = { position.toFloat() / duration.toFloat() },
-                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-                    color = Color(0xFFE7C9A0),
-                    trackColor = Color.White.copy(alpha = 0.2f),
-                )
             }
         }
     }

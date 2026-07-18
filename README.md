@@ -29,6 +29,10 @@ screen, deep sleep, Doze, hours unattended.
    normally has to be much louder than a bowl strike to fill the same room. Each
    card has its own **▶ Test** button, and **Test talk** plays the talk that is
    actually coming up next, so the level can be judged on real speech.
+4. The player bar at the bottom has a **draggable progress bar** — talks often
+   open with minutes of silence, so drag straight to the speech instead of
+   waiting it out. Alongside it: restart, −10s, play/pause, +10s, stop, and both
+   elapsed and remaining time. The notification carries the same controls.
 
 Keep the phone plugged in and the bells will play all day on their own.
 

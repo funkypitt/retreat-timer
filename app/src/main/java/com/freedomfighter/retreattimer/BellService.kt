@@ -43,9 +43,21 @@ class BellService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        when (intent?.action) {
-            ACTION_STOP -> { finish(); return START_NOT_STICKY }
-            ACTION_TOGGLE -> { togglePause(); return START_NOT_STICKY }
+        val action = intent?.action
+        // A transport action needs a live player. If the recording ended in the
+        // same instant the button was tapped, stop rather than leaving a started
+        // service sitting there with no notification behind it.
+        if (action in TRANSPORT && player == null) {
+            stopSelf()
+            return START_NOT_STICKY
+        }
+        when (action) {
+            ACTION_STOP -> finish()
+            ACTION_TOGGLE -> togglePause()
+            ACTION_BACK10 -> seekBy(-10_000)
+            ACTION_FWD10 -> seekBy(+10_000)
+            ACTION_RESTART -> seekTo(0)
+            ACTION_SEEK -> seekTo(intent.getIntExtra(EXTRA_POSITION_MS, 0))
             else -> startPlayback(intent)
         }
         return START_NOT_STICKY
@@ -108,6 +120,22 @@ class BellService : Service() {
         }
     }
 
+    /** Jump to an absolute position. This is what makes a recording's volume
+     *  testable: talks often open with a long silence, and without seeking the
+     *  only way to reach the speech is to wait it out. */
+    private fun seekTo(positionMs: Int) {
+        val p = player ?: return
+        val target = positionMs.coerceIn(0, runCatching { p.duration }.getOrDefault(0))
+        runCatching { p.seekTo(target) }
+        PlaybackState.positionMs = target
+        pushNotification()
+    }
+
+    private fun seekBy(deltaMs: Int) {
+        val p = player ?: return
+        seekTo(runCatching { p.currentPosition }.getOrDefault(0) + deltaMs)
+    }
+
     /** Drive the progress bar / remaining-time readout while playing. */
     private fun startTicker() {
         ticker?.cancel()
@@ -148,6 +176,8 @@ class BellService : Service() {
         )
         val toggle = servicePendingIntent(2, ACTION_TOGGLE)
         val stop = servicePendingIntent(1, ACTION_STOP)
+        val back10 = servicePendingIntent(3, ACTION_BACK10)
+        val fwd10 = servicePendingIntent(4, ACTION_FWD10)
 
         val remaining = (duration - position).coerceAtLeast(0)
         val text = if (duration > 0) {
@@ -164,11 +194,13 @@ class BellService : Service() {
             .setCategory(NotificationCompat.CATEGORY_TRANSPORT)
             .setOnlyAlertOnce(true)
             .setOngoing(playing)
+            .addAction(android.R.drawable.ic_media_rew, getString(R.string.back10), back10)
             .addAction(
                 if (playing) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play,
                 getString(if (playing) R.string.pause else R.string.play),
                 toggle,
             )
+            .addAction(android.R.drawable.ic_media_ff, getString(R.string.fwd10), fwd10)
             .addAction(android.R.drawable.ic_menu_close_clear_cancel, getString(R.string.stop), stop)
 
         if (duration > 0) builder.setProgress(duration, position, false)
@@ -229,6 +261,14 @@ class BellService : Service() {
     companion object {
         const val ACTION_STOP = "com.freedomfighter.retreattimer.STOP"
         const val ACTION_TOGGLE = "com.freedomfighter.retreattimer.TOGGLE"
+        const val ACTION_BACK10 = "com.freedomfighter.retreattimer.BACK10"
+        const val ACTION_FWD10 = "com.freedomfighter.retreattimer.FWD10"
+        const val ACTION_RESTART = "com.freedomfighter.retreattimer.RESTART"
+        const val ACTION_SEEK = "com.freedomfighter.retreattimer.SEEK"
+        private const val EXTRA_POSITION_MS = "position_ms"
+
+        /** Actions that act on an already-playing recording. */
+        private val TRANSPORT = setOf(ACTION_TOGGLE, ACTION_BACK10, ACTION_FWD10, ACTION_RESTART, ACTION_SEEK)
         private const val CHANNEL_ID = "retreat_ringing"
         private const val NOTIF_ID = 7
 
@@ -246,12 +286,27 @@ class BellService : Service() {
             }
         }
 
-        fun toggle(ctx: Context) {
-            ctx.startService(Intent(ctx, BellService::class.java).setAction(ACTION_TOGGLE))
+        fun toggle(ctx: Context) = send(ctx, ACTION_TOGGLE)
+
+        fun stop(ctx: Context) = send(ctx, ACTION_STOP)
+
+        fun back10(ctx: Context) = send(ctx, ACTION_BACK10)
+
+        fun fwd10(ctx: Context) = send(ctx, ACTION_FWD10)
+
+        fun restart(ctx: Context) = send(ctx, ACTION_RESTART)
+
+        /** Jump straight to [positionMs] — used by the draggable progress bar. */
+        fun seekTo(ctx: Context, positionMs: Int) {
+            ctx.startService(
+                Intent(ctx, BellService::class.java)
+                    .setAction(ACTION_SEEK)
+                    .putExtra(EXTRA_POSITION_MS, positionMs),
+            )
         }
 
-        fun stop(ctx: Context) {
-            ctx.startService(Intent(ctx, BellService::class.java).setAction(ACTION_STOP))
+        private fun send(ctx: Context, action: String) {
+            ctx.startService(Intent(ctx, BellService::class.java).setAction(action))
         }
     }
 }
