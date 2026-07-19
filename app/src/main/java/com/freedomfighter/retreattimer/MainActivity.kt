@@ -11,7 +11,6 @@ import android.os.Bundle
 import android.os.PowerManager
 import android.provider.OpenableColumns
 import android.provider.Settings
-import android.text.format.DateFormat
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -1100,11 +1099,13 @@ private fun TimeDialog(
     onDismiss: () -> Unit,
     onPicked: (Int, Int) -> Unit,
 ) {
-    val ctx = LocalContext.current
     val state = rememberTimePickerState(
         initialHour = initialHour,
         initialMinute = initialMinute,
-        is24Hour = DateFormat.is24HourFormat(ctx),
+        // 24h always, matching how every scheduled time is written (BellTime.time()).
+        // Following the phone's 12h setting here meant picking "7:00 PM" and then
+        // reading it back as "19:00" in the list — one schedule in two formats.
+        is24Hour = true,
     )
     var typing by remember { mutableStateOf(true) }
 
