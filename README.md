@@ -33,6 +33,12 @@ screen, deep sleep, Doze, hours unattended.
    open with minutes of silence, so drag straight to the speech instead of
    waiting it out. Alongside it: restart, −10s, play/pause, +10s, stop, and both
    elapsed and remaining time. The notification carries the same controls.
+5. **Keep Bluetooth speaker awake** (off by default): portable speakers drop the
+   connection after a few minutes of silence, so the next bell would come faintly
+   from the tablet instead. Turn this on when ringing through an external speaker
+   and it plays a barely-audible hiss between bells to hold the link open. It
+   does not touch the bells themselves — they still fire via the alarm system,
+   unchanged; this is just a separate faint stream on the same output.
 
 Keep the phone plugged in and the bells will play all day on their own.
 

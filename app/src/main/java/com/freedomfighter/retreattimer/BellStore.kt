@@ -46,6 +46,7 @@ object BellStore {
     private const val KEY_KDRIVE_URL = "kdrive_url"
     private const val KEY_PODCAST_URL = "podcast_url"
     private const val KEY_BELL_SOUND = "bell_sound"
+    private const val KEY_KEEP_SPEAKER_AWAKE = "keep_speaker_awake"
 
     private fun prefs(ctx: Context) =
         ctx.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -151,6 +152,16 @@ object BellStore {
 
     fun setBellSoundKey(ctx: Context, key: String) {
         prefs(ctx).edit().putString(KEY_BELL_SOUND, key).apply()
+    }
+
+    /** Whether to keep a Bluetooth speaker awake between bells with a faint
+     *  continuous sound (see [KeepAliveService]). Off by default — it only helps
+     *  when ringing through an external speaker that sleeps on silence. */
+    fun keepSpeakerAwake(ctx: Context): Boolean =
+        prefs(ctx).getBoolean(KEY_KEEP_SPEAKER_AWAKE, false)
+
+    fun setKeepSpeakerAwake(ctx: Context, value: Boolean) {
+        prefs(ctx).edit().putBoolean(KEY_KEEP_SPEAKER_AWAKE, value).apply()
     }
 
     /** Last kDrive public-share link the teacher used, pre-filled next time. */

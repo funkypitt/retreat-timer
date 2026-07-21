@@ -271,6 +271,7 @@ private fun ScheduleTab() {
         item { BellSoundCard() }
         item { BellVolumeCard() }
         item { TalkVolumeCard(bells, talks, tick) }
+        item { KeepSpeakerAwakeCard(tick) }
         item { NextBellLine(bells, tick) }
 
         items(bells, key = { it.id }) { bell ->
@@ -758,6 +759,65 @@ private fun VolumeCard(
             Text(hint, fontSize = 12.sp, color = Ink.copy(alpha = 0.6f))
         }
     }
+}
+
+/** Opt-in switch that keeps a Bluetooth speaker from sleeping between bells by
+ *  playing a faint continuous sound (see [KeepAliveService]). Off by default;
+ *  only useful when ringing through an external speaker. */
+@Composable
+private fun KeepSpeakerAwakeCard(tick: Long) {
+    val ctx = LocalContext.current
+    var on by remember { mutableStateOf(BellStore.keepSpeakerAwake(ctx)) }
+    val btConnected = remember(tick) { isBluetoothSpeakerConnected(ctx) }
+
+    Card(
+        colors = CardDefaults.cardColors(containerColor = CardBg),
+        shape = RoundedCornerShape(16.dp),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Keep Bluetooth speaker awake", fontWeight = FontWeight.SemiBold, color = Ink)
+                    Text(
+                        if (btConnected) "✓ A Bluetooth speaker is connected"
+                        else "No Bluetooth speaker connected right now",
+                        fontSize = 12.sp,
+                        color = if (btConnected) GoodGreen else Ink.copy(alpha = 0.5f),
+                        modifier = Modifier.padding(top = 2.dp),
+                    )
+                }
+                Switch(
+                    checked = on,
+                    onCheckedChange = {
+                        on = it
+                        KeepAliveService.setEnabled(ctx, it)
+                    },
+                    colors = SwitchDefaults.colors(checkedThumbColor = GoodGreen, checkedTrackColor = GoodGreen.copy(alpha = 0.4f)),
+                )
+            }
+            Text(
+                "Portable speakers often disconnect after a few minutes of silence, " +
+                    "so the next bell comes faintly from the tablet instead. This plays " +
+                    "a barely-audible hiss between bells to keep the speaker linked. Turn " +
+                    "it on only when using an external speaker, and keep the tablet charged.",
+                fontSize = 12.sp, color = Ink.copy(alpha = 0.6f), modifier = Modifier.padding(top = 8.dp),
+            )
+        }
+    }
+}
+
+/** True if an audio output route that behaves like a wireless speaker is
+ *  currently connected. Reads the audio device list, which needs no permission. */
+private fun isBluetoothSpeakerConnected(ctx: Context): Boolean {
+    val am = ctx.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+    return runCatching {
+        am.getDevices(AudioManager.GET_DEVICES_OUTPUTS).any {
+            it.type == android.media.AudioDeviceInfo.TYPE_BLUETOOTH_A2DP ||
+                it.type == android.media.AudioDeviceInfo.TYPE_BLE_SPEAKER ||
+                it.type == android.media.AudioDeviceInfo.TYPE_BLE_HEADSET
+        }
+    }.getOrDefault(false)
 }
 
 @Composable

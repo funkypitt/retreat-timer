@@ -12,5 +12,8 @@ import android.content.Intent
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         BellScheduler.rescheduleAll(context)
+        // Resume keeping the Bluetooth speaker awake if the teacher had it on, so
+        // a reboot overnight doesn't quietly leave the speaker free to disconnect.
+        KeepAliveService.start(context)
     }
 }
