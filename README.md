@@ -36,9 +36,11 @@ screen, deep sleep, Doze, hours unattended.
 5. **Keep Bluetooth speaker awake** (off by default): portable speakers drop the
    connection after a few minutes of silence, so the next bell would come faintly
    from the tablet instead. Turn this on when ringing through an external speaker
-   and it plays a barely-audible hiss between bells to hold the link open. It
-   does not touch the bells themselves — they still fire via the alarm system,
-   unchanged; this is just a separate faint stream on the same output.
+   and it holds the link open with a **silent keep-alive signal** between bells —
+   near-digital-silence (~−84 dBFS), the same trick as the "silence + bells" loops
+   centres play, which keep the link alive by streaming continuously rather than
+   by being loud. It does not touch the bells themselves — they still fire via the
+   alarm system, unchanged; this is just a separate silent stream on the same output.
 
 Keep the phone plugged in and the bells will play all day on their own.
 

@@ -23,9 +23,11 @@ import java.util.Random
  * Many portable speakers drop the A2DP link after a few minutes of silence to
  * save battery. On a retreat there can be an hour of silence between rings, so
  * the speaker disconnects and the bell then comes out — faintly — of the
- * tablet's own speaker instead. This service emits a continuous, very quiet hiss
- * so the audio link never goes idle. It is exactly the trick behind the
- * "silence + bells" recordings many centres already play on a loop.
+ * tablet's own speaker instead. This service emits a continuous, near-silent
+ * stream so the audio link never goes idle. It is exactly the trick behind the
+ * "silence + bells" recordings many centres already play on a loop — those keep
+ * the link alive with an essentially digital-silent stream, so what matters is
+ * that the stream stays open, not that it carries any audible sound.
  *
  * It is entirely separate from the bell path: the bells still fire via
  * AlarmManager through [BellService] on the alarm stream, unchanged. This service
@@ -71,8 +73,8 @@ class KeepAliveService : Service() {
         }
     }
 
-    /** Generate and write low-amplitude white noise forever. A blocking write on
-     *  a STREAM-mode AudioTrack paces itself to real time, so this is a steady,
+    /** Generate and write a near-silent dither forever. A blocking write on a
+     *  STREAM-mode AudioTrack paces itself to real time, so this is a steady,
      *  cheap trickle rather than a busy loop. */
     private fun streamNoise() {
         val minBuf = AudioTrack.getMinBufferSize(
@@ -108,9 +110,9 @@ class KeepAliveService : Service() {
             t.play()
             while (running) {
                 for (i in buf.indices) {
-                    // Uniform noise in [-AMPLITUDE, +AMPLITUDE]. AMPLITUDE is the
-                    // one field-tunable knob: raise it if a stubborn speaker still
-                    // sleeps, lower it if the hiss is noticeable in a quiet hall.
+                    // Uniform dither in [-AMPLITUDE, +AMPLITUDE], kept at near
+                    // silence — enough to be a real (non-zero) stream, far too
+                    // quiet to hear. Raise AMPLITUDE only if a speaker still sleeps.
                     buf[i] = (rng.nextInt(AMPLITUDE * 2 + 1) - AMPLITUDE).toShort()
                 }
                 if (t.write(buf, 0, buf.size) < 0) break // device error → give up
@@ -181,10 +183,14 @@ class KeepAliveService : Service() {
         private const val NOTIF_ID = 8
         private const val SAMPLE_RATE = 44_100
 
-        /** Peak sample value of the keep-alive noise (out of 32767). ~80 is a
-         *  faint hiss — enough energy to keep a speaker's link alive, low enough
-         *  to be unobtrusive. The single knob to tune per speaker. */
-        private const val AMPLITUDE = 80
+        /** Peak sample value of the keep-alive signal (out of 32767). Set to near
+         *  silence (~−84 dBFS). The centres' proven "silence + bells" loops keep a
+         *  speaker linked with an essentially digital-silent stream (measured
+         *  ~−91 dBFS between the bells): it is the continuously-open audio stream,
+         *  not any energy in it, that holds the A2DP link open. A tiny non-zero
+         *  value keeps the PCM from being literally all-zero frames. Raise it only
+         *  if some unusually strict speaker still sleeps. */
+        private const val AMPLITUDE = 2
 
         /** Turn the keep-alive on or off, persisting the choice so it survives a
          *  reboot (see [BootReceiver]). */

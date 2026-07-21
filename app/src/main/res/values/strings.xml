@@ -12,8 +12,8 @@
     <string name="back10">−10s</string>
     <string name="fwd10">+10s</string>
     <string name="keepalive_channel">Keep speaker awake</string>
-    <string name="keepalive_channel_desc">A faint continuous sound so a Bluetooth speaker won\'t sleep between bells.</string>
+    <string name="keepalive_channel_desc">A silent keep-alive signal so a Bluetooth speaker won\'t sleep between bells.</string>
     <string name="keepalive_title">Keeping the speaker awake</string>
-    <string name="keepalive_text">Playing a faint sound so a Bluetooth speaker won\'t disconnect.</string>
+    <string name="keepalive_text">Holding the Bluetooth link open with a silent signal.</string>
     <string name="ic_launcher_background">#F7F3EA</string>
 </resources>

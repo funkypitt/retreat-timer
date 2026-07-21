@@ -798,9 +798,10 @@ private fun KeepSpeakerAwakeCard(tick: Long) {
             }
             Text(
                 "Portable speakers often disconnect after a few minutes of silence, " +
-                    "so the next bell comes faintly from the tablet instead. This plays " +
-                    "a barely-audible hiss between bells to keep the speaker linked. Turn " +
-                    "it on only when using an external speaker, and keep the tablet charged.",
+                    "so the next bell comes faintly from the tablet instead. This holds " +
+                    "the link open with a silent keep-alive signal between bells — the " +
+                    "same trick as the “silence + bells” loops centres play. Turn it on " +
+                    "only when using an external speaker, and keep the tablet charged.",
                 fontSize = 12.sp, color = Ink.copy(alpha = 0.6f), modifier = Modifier.padding(top = 8.dp),
             )
         }
