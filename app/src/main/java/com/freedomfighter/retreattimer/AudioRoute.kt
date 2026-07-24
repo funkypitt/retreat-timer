@@ -3,6 +3,7 @@ package com.freedomfighter.retreattimer
 import android.content.Context
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
+import android.media.AudioRouting
 
 /**
  * The connected Bluetooth (or BLE) speaker/headset to pin playback to, or null if
@@ -27,4 +28,17 @@ fun bluetoothOutput(ctx: Context): AudioDeviceInfo? {
                 it.type == AudioDeviceInfo.TYPE_BLE_HEADSET
         }
     }.getOrNull()
+}
+
+/**
+ * Route this player to the room's Bluetooth speaker when one is present.
+ *
+ * Deliberately fail-safe: the whole call is wrapped so that *nothing* here — a
+ * device-query fault, a driver rejecting [setPreferredDevice] — can ever throw
+ * out of the critical playback path. This runs a hair before a scheduled bell or
+ * talk starts; the bell must ring even if the routing hint fails, in which case
+ * playback simply falls back to the system's default output.
+ */
+fun AudioRouting.preferBluetoothOutput(ctx: Context) {
+    runCatching { bluetoothOutput(ctx)?.let { setPreferredDevice(it) } }
 }
