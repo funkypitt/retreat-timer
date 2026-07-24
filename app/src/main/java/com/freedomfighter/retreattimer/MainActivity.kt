@@ -810,16 +810,7 @@ private fun KeepSpeakerAwakeCard(tick: Long) {
 
 /** True if an audio output route that behaves like a wireless speaker is
  *  currently connected. Reads the audio device list, which needs no permission. */
-private fun isBluetoothSpeakerConnected(ctx: Context): Boolean {
-    val am = ctx.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-    return runCatching {
-        am.getDevices(AudioManager.GET_DEVICES_OUTPUTS).any {
-            it.type == android.media.AudioDeviceInfo.TYPE_BLUETOOTH_A2DP ||
-                it.type == android.media.AudioDeviceInfo.TYPE_BLE_SPEAKER ||
-                it.type == android.media.AudioDeviceInfo.TYPE_BLE_HEADSET
-        }
-    }.getOrDefault(false)
-}
+private fun isBluetoothSpeakerConnected(ctx: Context): Boolean = bluetoothOutput(ctx) != null
 
 @Composable
 private fun NextBellLine(bells: List<BellTime>, tick: Long) {

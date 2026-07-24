@@ -84,6 +84,10 @@ class BellService : Service() {
                         .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
                         .build(),
                 )
+                // Keep the audio on the room's Bluetooth speaker instead of also
+                // leaking out of the phone, which the alarm stream does on many
+                // devices (see [bluetoothOutput]).
+                bluetoothOutput(this@BellService)?.let { setPreferredDevice(it) }
                 setWakeMode(this@BellService, PowerManager.PARTIAL_WAKE_LOCK)
                 if (talkUri != null) {
                     setDataSource(this@BellService, Uri.parse(talkUri))

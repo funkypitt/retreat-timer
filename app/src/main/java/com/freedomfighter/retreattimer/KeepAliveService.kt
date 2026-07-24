@@ -104,6 +104,10 @@ class KeepAliveService : Service() {
         }.getOrNull() ?: run { stopSelf(); return }
 
         track = t
+        // Send the keep-alive trickle to the Bluetooth speaker specifically —
+        // it exists to hold *that* link open, so it must not leak to the phone
+        // (see [bluetoothOutput]).
+        bluetoothOutput(this)?.let { t.setPreferredDevice(it) }
         val buf = ShortArray(1024)
         val rng = Random()
         runCatching {

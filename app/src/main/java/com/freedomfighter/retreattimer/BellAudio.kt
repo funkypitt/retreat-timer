@@ -31,6 +31,8 @@ object BellAudio {
                         .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
                         .build(),
                 )
+                // Match the room's Bluetooth speaker, not the phone (see [bluetoothOutput]).
+                bluetoothOutput(ctx)?.let { setPreferredDevice(it) }
                 val afd = ctx.resources.openRawResourceFd(rawRes)
                 setDataSource(afd.fileDescriptor, afd.startOffset, afd.length)
                 afd.close()
