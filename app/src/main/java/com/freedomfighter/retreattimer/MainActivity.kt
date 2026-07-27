@@ -465,7 +465,7 @@ private fun LibraryTab(onGoToSchedule: () -> Unit) {
         }
         item {
             Button(
-                onClick = { picker.launch(arrayOf("audio/*")) },
+                onClick = { picker.launch(PICKABLE_TYPES) },
                 colors = ButtonDefaults.buttonColors(containerColor = Accent),
                 shape = RoundedCornerShape(16.dp),
                 modifier = Modifier.fillMaxWidth().height(52.dp),
@@ -844,6 +844,18 @@ private fun FooterNote() {
 }
 
 private val AUDIO_EXTS = setOf("mp3", "m4a", "aac", "wav", "ogg", "flac", "opus", "mp4")
+
+/**
+ * What the "from your phone" picker will show. The audio wildcard alone hides
+ * files the provider failed to type — FLAC and Opus are routinely handed over as
+ * `application/octet-stream` by file managers and cloud providers, and the
+ * picker then greys out a talk that plays perfectly well. Allowing the untyped
+ * catch-all makes those reachable; the cost is that other binaries show up in
+ * the picker too, so a wrong pick is possible. MediaPlayer identifies audio by
+ * sniffing content rather than by name, so a genuine recording plays whatever
+ * type its provider claimed.
+ */
+private val PICKABLE_TYPES = arrayOf("audio/*", "application/octet-stream")
 
 /**
  * Paste a kDrive public-share link, list its audio files, and download the chosen
