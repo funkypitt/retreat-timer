@@ -12,8 +12,8 @@ android {
         applicationId = "com.freedomfighter.retreattimer"
         minSdk = 26
         targetSdk = 34
-        versionCode = 13
-        versionName = "1.8.3"
+        versionCode = 14
+        versionName = "1.8.4"
     }
 
     buildTypes {

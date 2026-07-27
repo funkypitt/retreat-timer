@@ -105,13 +105,15 @@ class KeepAliveService : Service() {
 
         track = t
         // Send the keep-alive trickle to the Bluetooth speaker specifically —
-        // it exists to hold *that* link open, so it must not leak to the phone
-        // (see [preferBluetoothOutput]).
-        t.preferBluetoothOutput(this)
+        // it exists to hold *that* link open, so it must not leak to the phone.
+        // A built AudioTrack accepts the hint straight away, unlike MediaPlayer
+        // (see [preferBluetoothOutput]); re-applied after play() if refused.
+        val pinned = t.preferBluetoothOutput(this)
         val buf = ShortArray(1024)
         val rng = Random()
         runCatching {
             t.play()
+            if (!pinned) t.preferBluetoothOutput(this)
             while (running) {
                 for (i in buf.indices) {
                     // Uniform dither in [-AMPLITUDE, +AMPLITUDE], kept at near

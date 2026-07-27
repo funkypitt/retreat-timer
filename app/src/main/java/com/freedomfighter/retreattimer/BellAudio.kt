@@ -31,14 +31,16 @@ object BellAudio {
                         .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
                         .build(),
                 )
-                // Match the room's Bluetooth speaker, not the phone (see [preferBluetoothOutput]).
-                preferBluetoothOutput(ctx)
                 val afd = ctx.resources.openRawResourceFd(rawRes)
                 setDataSource(afd.fileDescriptor, afd.startOffset, afd.length)
                 afd.close()
                 setOnCompletionListener { stop() }
                 prepare()
+                // Match the room's Bluetooth speaker, not the phone — after
+                // prepare(), or the hint is dropped (see [preferBluetoothOutput]).
+                val pinned = preferBluetoothOutput(ctx)
                 start()
+                if (!pinned) preferBluetoothOutput(ctx)
             }
         }
     }
