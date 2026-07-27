@@ -172,12 +172,23 @@ class BellService : Service() {
     private fun buildNotification(playing: Boolean, position: Int, duration: Int): android.app.Notification {
         val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                CHANNEL_ID,
-                getString(R.string.channel_ringing),
-                NotificationManager.IMPORTANCE_HIGH,
-            ).apply { description = getString(R.string.channel_ringing_desc) }
-            nm.createNotificationChannel(channel)
+            // IMPORTANCE_HIGH so the transport controls pop up as a heads-up, but
+            // silent and still: the bell itself is the sound, and a notification
+            // ding or buzz out of the phone is exactly the noise a silent retreat
+            // must not have. A channel's settings are frozen once created, so
+            // silencing it needs a new id — the pre-1.8.4 one is dropped below.
+            nm.createNotificationChannel(
+                NotificationChannel(
+                    CHANNEL_ID,
+                    getString(R.string.channel_ringing),
+                    NotificationManager.IMPORTANCE_HIGH,
+                ).apply {
+                    description = getString(R.string.channel_ringing_desc)
+                    setSound(null, null)
+                    enableVibration(false)
+                },
+            )
+            runCatching { nm.deleteNotificationChannel(LEGACY_CHANNEL_ID) }
         }
         val tap = PendingIntent.getActivity(
             this, 0, Intent(this, MainActivity::class.java),
@@ -278,7 +289,13 @@ class BellService : Service() {
 
         /** Actions that act on an already-playing recording. */
         private val TRANSPORT = setOf(ACTION_TOGGLE, ACTION_BACK10, ACTION_FWD10, ACTION_RESTART, ACTION_SEEK)
-        private const val CHANNEL_ID = "retreat_ringing"
+        private const val CHANNEL_ID = "retreat_ringing_silent"
+
+        /** The channel used up to 1.8.3. It was created at IMPORTANCE_HIGH with the
+         *  default notification sound, so every bell also dinged out of the phone;
+         *  that cannot be changed in place, hence [CHANNEL_ID] above. Deleted on
+         *  first run so it stops showing in the app's notification settings. */
+        private const val LEGACY_CHANNEL_ID = "retreat_ringing"
         private const val NOTIF_ID = 7
 
         /** Play a dharma talk now, through the foreground service so it keeps
