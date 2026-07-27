@@ -74,10 +74,16 @@ object KDriveClient {
         return all
     }
 
+    /** The public-share download URL for a file. Exposed so [DownloadService] can
+     *  fetch it without holding a [KDriveConfig] — everything it needs is in the
+     *  three ids, and [Http] follows the same redirects [openStream] does. */
+    fun downloadUrl(config: KDriveConfig, fileId: String): String =
+        "$BASE/2/app/${config.driveId}/share/${config.linkUuid}/files/$fileId/download"
+
     /** Stream a file into [destination]. Returns the file on success; deletes a
      *  partial file and rethrows on failure. */
     fun downloadFile(config: KDriveConfig, fileId: String, destination: File): File {
-        val url = "$BASE/2/app/${config.driveId}/share/${config.linkUuid}/files/$fileId/download"
+        val url = downloadUrl(config, fileId)
         try {
             openStream(url).use { input ->
                 destination.outputStream().use { output -> input.copyTo(output) }

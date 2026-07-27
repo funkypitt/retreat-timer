@@ -386,6 +386,12 @@ private fun LibraryTab(onGoToSchedule: () -> Unit) {
     var showPodcast by remember { mutableStateOf(false) }
     var timeRequest by remember { mutableStateOf<TimeRequest?>(null) }
 
+    // A background download saves straight to storage and bumps this counter;
+    // reload so the freshly-downloaded talk shows up in the list.
+    LaunchedEffect(DownloadState.libraryVersion) {
+        talks = BellStore.loadTalks(ctx)
+    }
+
     timeRequest?.let { req ->
         TimeDialog(
             initialHour = req.hour,
@@ -403,7 +409,6 @@ private fun LibraryTab(onGoToSchedule: () -> Unit) {
     if (showKDrive) {
         KDriveDialog(
             existingTitles = talks.map { it.title }.toSet(),
-            onAdded = ::addTalk,
             onDismiss = { showKDrive = false },
         )
     }
@@ -411,7 +416,6 @@ private fun LibraryTab(onGoToSchedule: () -> Unit) {
     if (showPodcast) {
         PodcastDialog(
             existingTitles = talks.map { it.title }.toSet(),
-            onAdded = ::addTalk,
             onDismiss = { showPodcast = false },
         )
     }
@@ -866,7 +870,6 @@ private val PICKABLE_TYPES = arrayOf("audio/*", "application/octet-stream")
 @Composable
 private fun KDriveDialog(
     existingTitles: Set<String>,
-    onAdded: (DharmaTalk) -> Unit,
     onDismiss: () -> Unit,
 ) {
     val ctx = LocalContext.current
@@ -877,8 +880,6 @@ private fun KDriveDialog(
     var files by remember { mutableStateOf<List<RemoteFile>>(emptyList()) }
     var status by remember { mutableStateOf<String?>(null) }
     var connecting by remember { mutableStateOf(false) }
-    var downloaded by remember { mutableStateOf(existingTitles) }   // titles already in library
-    var downloading by remember { mutableStateOf<Set<String>>(emptySet()) } // file ids in flight
 
     fun connect() {
         status = null
@@ -906,24 +907,11 @@ private fun KDriveDialog(
 
     fun download(file: RemoteFile) {
         val cfg = config ?: return
-        downloading = downloading + file.id
-        scope.launch {
-            val result = withContext(Dispatchers.IO) {
-                runCatching {
-                    val safe = file.name.replace(Regex("[^A-Za-z0-9._ -]"), "_")
-                    val dest = File(BellStore.talksDir(ctx), "${System.nanoTime()}_$safe")
-                    KDriveClient.downloadFile(cfg, file.id, dest)
-                    val title = file.name.substringBeforeLast('.').ifBlank { file.name }
-                    DharmaTalk(BellStore.nextId(ctx), Uri.fromFile(dest).toString(), title)
-                }
-            }
-            downloading = downloading - file.id
-            result.onSuccess { talk ->
-                onAdded(talk)
-                downloaded = downloaded + talk.title
-                status = "Added “${talk.title}”."
-            }.onFailure { status = "Download failed: ${it.message}" }
-        }
+        val safe = file.name.replace(Regex("[^A-Za-z0-9._ -]"), "_")
+        val filename = "${System.nanoTime()}_$safe"
+        val title = file.name.substringBeforeLast('.').ifBlank { file.name }
+        DownloadService.enqueue(ctx, key = file.id, url = KDriveClient.downloadUrl(cfg, file.id), filename = filename, title = title)
+        status = "Downloading in the background — it lands in your Library when done. You can close this."
     }
 
     AlertDialog(
@@ -966,15 +954,20 @@ private fun KDriveDialog(
                     Column(Modifier.verticalScroll(rememberScrollState())) {
                         files.forEach { f ->
                             val title = f.name.substringBeforeLast('.').ifBlank { f.name }
-                            val isHere = title in downloaded
-                            val isBusy = f.id in downloading
+                            val isHere = title in existingTitles || title in DownloadState.justAdded
+                            val isBusy = f.id in DownloadState.inFlight
+                            val err = DownloadState.errors[f.id]
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
                                 modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
                             ) {
                                 Column(Modifier.weight(1f)) {
                                     Text(title, fontSize = 14.sp, color = Ink, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                                    Text(formatSize(f.size), fontSize = 11.sp, color = Ink.copy(alpha = 0.5f))
+                                    Text(
+                                        err?.let { "Failed: $it — tap to retry" } ?: formatSize(f.size),
+                                        fontSize = 11.sp,
+                                        color = if (err != null) WarnAmber else Ink.copy(alpha = 0.5f),
+                                    )
                                 }
                                 when {
                                     isBusy -> CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.dp, color = Accent)
@@ -1002,7 +995,6 @@ private fun KDriveDialog(
 @Composable
 private fun PodcastDialog(
     existingTitles: Set<String>,
-    onAdded: (DharmaTalk) -> Unit,
     onDismiss: () -> Unit,
 ) {
     val ctx = LocalContext.current
@@ -1012,8 +1004,6 @@ private fun PodcastDialog(
     var episodes by remember { mutableStateOf<List<Episode>>(emptyList()) }
     var status by remember { mutableStateOf<String?>(null) }
     var fetching by remember { mutableStateOf(false) }
-    var downloaded by remember { mutableStateOf(existingTitles) }   // titles already in library
-    var downloading by remember { mutableStateOf<Set<String>>(emptySet()) } // episode urls in flight
 
     fun fetch() {
         status = null
@@ -1032,25 +1022,12 @@ private fun PodcastDialog(
     }
 
     fun download(ep: Episode) {
-        downloading = downloading + ep.url
-        scope.launch {
-            val result = withContext(Dispatchers.IO) {
-                runCatching {
-                    val ext = ep.url.substringBefore('?').substringAfterLast('.', "")
-                        .takeIf { it.length in 2..4 && it.all(Char::isLetterOrDigit) }?.lowercase() ?: "mp3"
-                    val safe = ep.title.replace(Regex("[^A-Za-z0-9._ -]"), "_").take(80)
-                    val dest = File(BellStore.talksDir(ctx), "${System.nanoTime()}_$safe.$ext")
-                    Http.download(ep.url, dest)
-                    DharmaTalk(BellStore.nextId(ctx), Uri.fromFile(dest).toString(), ep.title)
-                }
-            }
-            downloading = downloading - ep.url
-            result.onSuccess { talk ->
-                onAdded(talk)
-                downloaded = downloaded + talk.title
-                status = "Added “${talk.title}”."
-            }.onFailure { status = "Download failed: ${it.message}" }
-        }
+        val ext = ep.url.substringBefore('?').substringAfterLast('.', "")
+            .takeIf { it.length in 2..4 && it.all(Char::isLetterOrDigit) }?.lowercase() ?: "mp3"
+        val safe = ep.title.replace(Regex("[^A-Za-z0-9._ -]"), "_").take(80)
+        val filename = "${System.nanoTime()}_$safe.$ext"
+        DownloadService.enqueue(ctx, key = ep.url, url = ep.url, filename = filename, title = ep.title)
+        status = "Downloading in the background — it lands in your Library when done. You can close this."
     }
 
     AlertDialog(
@@ -1092,8 +1069,9 @@ private fun PodcastDialog(
                     Spacer(Modifier.height(8.dp))
                     Column(Modifier.verticalScroll(rememberScrollState())) {
                         episodes.forEach { ep ->
-                            val isHere = ep.title in downloaded
-                            val isBusy = ep.url in downloading
+                            val isHere = ep.title in existingTitles || ep.title in DownloadState.justAdded
+                            val isBusy = ep.url in DownloadState.inFlight
+                            val err = DownloadState.errors[ep.url]
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
                                 modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
@@ -1104,8 +1082,9 @@ private fun PodcastDialog(
                                         formatDuration(ep.durationMs).ifBlank { null },
                                         formatSize(ep.sizeBytes).takeIf { ep.sizeBytes > 0 },
                                     ).joinToString("  ·  ")
-                                    if (meta.isNotEmpty()) {
-                                        Text(meta, fontSize = 11.sp, color = Ink.copy(alpha = 0.5f))
+                                    when {
+                                        err != null -> Text("Failed: $err — tap to retry", fontSize = 11.sp, color = WarnAmber)
+                                        meta.isNotEmpty() -> Text(meta, fontSize = 11.sp, color = Ink.copy(alpha = 0.5f))
                                     }
                                 }
                                 when {
