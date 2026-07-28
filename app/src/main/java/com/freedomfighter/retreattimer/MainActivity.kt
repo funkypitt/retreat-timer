@@ -269,6 +269,7 @@ private fun ScheduleTab() {
     ) {
         item { Spacer(Modifier.height(8.dp)); ReliabilityCard(tick) }
         item { BellSoundCard() }
+        item { LevelsHeader() }
         item { BellVolumeCard() }
         item { TalkVolumeCard(bells, talks, tick) }
         item { KeepSpeakerAwakeCard(tick) }
@@ -673,17 +674,18 @@ private fun BellSoundCard() {
     }
 }
 
-/** Bell-volume slider. Live ringing and the Test/Play buttons use this exact
- *  level, so the slider is a true preview of room loudness. */
+/** Bell trim. A software gain the bells play through, so it previews true room
+ *  loudness on the phone speaker and over a Bluetooth speaker alike. */
 @Composable
 private fun BellVolumeCard() {
     val ctx = LocalContext.current
     VolumeCard(
-        title = "Bell volume",
+        title = "Bells",
         testLabel = "Test bells",
-        hint = "Every bell rings at this exact level. Press Test bells to hear it.",
-        stored = BellStore.alarmVolume(ctx),
-        onStore = { BellStore.setAlarmVolume(ctx, it) },
+        hint = "Trims the bells down from the phone/speaker volume. 100% = full. Test to hear it.",
+        storedPct = BellStore.bellGain(ctx),
+        onStore = { BellStore.setBellGain(ctx, it) },
+        onLiveApply = { BellAudio.setGain(it) },
         onTest = { BellAudio.playTest(ctx) },
     )
 }
@@ -703,37 +705,57 @@ private fun TalkVolumeCard(bells: List<BellTime>, talks: List<DharmaTalk>, tick:
             ?: talks.firstOrNull()?.let { it.uri to it.title }
     }
     VolumeCard(
-        title = "Talk volume",
+        title = "Talks",
         testLabel = "Test talk",
         hint = if (sample != null) {
-            "Dharma talks play at this level — set higher than the bells if speech " +
-                "has to carry. Test plays “${sample.second}”; adjust while it runs."
+            "Trims talks independently of the bells, so speech and bowl strikes stay " +
+                "matched. Test plays “${sample.second}”; adjust while it runs."
         } else {
-            "Dharma talks play at this level, separately from the bells. Add a talk " +
-                "in the Library tab to test it."
+            "Trims talks independently of the bells. Add a talk in the Library tab to test it."
         },
-        stored = BellStore.talkVolume(ctx),
-        onStore = { BellStore.setTalkVolume(ctx, it) },
+        storedPct = BellStore.talkGain(ctx),
+        onStore = { BellStore.setTalkGain(ctx, it) },
+        onLiveApply = { BellService.setGain(it) },
         onTest = sample?.let { (uri, title) -> { BellService.playTalk(ctx, uri, title) } },
     )
 }
 
-/** Shared slider card: writes the chosen level straight to STREAM_ALARM so what
- *  is heard while dragging is what the room will hear. */
+/** Lowest a trim can go — a mis-drag must never silence an unattended bell. */
+private const val FLOOR_PCT = 5
+
+/** Intro above the two trims, stating plainly that the master loudness is the
+ *  phone's / speaker's own volume and these only trim down from it. */
+@Composable
+private fun LevelsHeader() {
+    Column(Modifier.fillMaxWidth().padding(top = 8.dp, start = 4.dp, end = 4.dp)) {
+        Text(
+            "Levels",
+            fontFamily = FontFamily.Serif, fontWeight = FontWeight.Bold, fontSize = 18.sp, color = Ink,
+        )
+        Text(
+            "Overall loudness follows the phone's volume — and, over Bluetooth, your speaker's. " +
+                "These only trim bells and talks down from there, so the two stay matched through " +
+                "an unattended day.",
+            fontSize = 12.sp, color = Ink.copy(alpha = 0.6f), modifier = Modifier.padding(top = 2.dp),
+        )
+    }
+}
+
+/** Shared trim card: a 0–100% software gain (see [gainScalar]). Overall loudness
+ *  is the phone's / speaker's own volume; this only attenuates below it, and it is
+ *  applied inside the player so it works over Bluetooth. [onLiveApply] re-trims a
+ *  Test that is already playing, so dragging is heard immediately. */
 @Composable
 private fun VolumeCard(
     title: String,
     testLabel: String,
     hint: String,
-    stored: Int,
+    storedPct: Int,
     onStore: (Int) -> Unit,
+    onLiveApply: (Int) -> Unit,
     onTest: (() -> Unit)?,
 ) {
-    val ctx = LocalContext.current
-    val am = ctx.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-    val max = am.getStreamMaxVolume(AudioManager.STREAM_ALARM)
-    val initial = if (stored < 0) am.getStreamVolume(AudioManager.STREAM_ALARM) else stored
-    var vol by remember { mutableStateOf(initial.toFloat()) }
+    var pct by remember { mutableStateOf(storedPct.coerceIn(FLOOR_PCT, 100).toFloat()) }
 
     Card(
         colors = CardDefaults.cardColors(containerColor = CardBg),
@@ -743,21 +765,24 @@ private fun VolumeCard(
         Column(Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(title, fontWeight = FontWeight.SemiBold, color = Ink, modifier = Modifier.weight(1f))
+                Text(
+                    "${pct.toInt()}%", color = Ink.copy(alpha = 0.6f),
+                    fontFamily = FontFamily.Monospace, fontSize = 13.sp,
+                )
                 TextButton(onClick = { onTest?.invoke() }, enabled = onTest != null) {
                     Icon(Icons.Filled.PlayArrow, contentDescription = null, tint = Accent)
                     Spacer(Modifier.width(4.dp)); Text(testLabel, color = Accent)
                 }
             }
             Slider(
-                value = vol,
+                value = pct,
                 onValueChange = {
-                    vol = it
-                    val v = it.toInt().coerceIn(0, max)
-                    onStore(v)
-                    am.setStreamVolume(AudioManager.STREAM_ALARM, v, 0)
+                    pct = it
+                    val p = it.toInt().coerceIn(FLOOR_PCT, 100)
+                    onStore(p)
+                    onLiveApply(p)
                 },
-                valueRange = 0f..max.toFloat(),
-                steps = (max - 1).coerceAtLeast(0),
+                valueRange = FLOOR_PCT.toFloat()..100f,
                 colors = SliderDefaults.colors(thumbColor = Accent, activeTrackColor = Accent),
             )
             Text(hint, fontSize = 12.sp, color = Ink.copy(alpha = 0.6f))

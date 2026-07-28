@@ -8,7 +8,6 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.media.AudioAttributes
-import android.media.AudioManager
 import android.media.MediaPlayer
 import android.net.Uri
 import android.os.Build
@@ -74,7 +73,8 @@ class BellService : Service() {
 
         startBellForeground(NOTIF_ID, buildNotification(playing = true, position = 0, duration = 0))
         acquireStartupLock()
-        applyVolume(isTalk = talkUri != null)
+        active = this
+        val gain = gainScalar(if (talkUri != null) BellStore.talkGain(this) else BellStore.bellGain(this))
 
         runCatching {
             player = MediaPlayer().apply {
@@ -95,6 +95,7 @@ class BellService : Service() {
                 setOnCompletionListener { finish() }
                 setOnErrorListener { _, _, _ -> finish(); true }
                 prepare()
+                setVolume(gain, gain)
                 // Keep the audio on the room's Bluetooth speaker instead of also
                 // leaking out of the phone, which the alarm stream does on many
                 // devices. Must come after prepare() — before the data source is
@@ -249,22 +250,18 @@ class BellService : Service() {
         }
     }
 
-    /** Force STREAM_ALARM to the level the teacher tested with, so what they heard
-     *  when pressing "Test" is exactly what the room hears now. Talks and bells
-     *  carry their own levels — a spoken recording normally needs to be much
-     *  louder than a bowl strike to fill the same room. */
-    private fun applyVolume(isTalk: Boolean) {
-        val desired = if (isTalk) BellStore.talkVolume(this) else BellStore.alarmVolume(this)
-        if (desired < 0) return
-        val am = getSystemService(Context.AUDIO_SERVICE) as AudioManager
-        val max = am.getStreamMaxVolume(AudioManager.STREAM_ALARM)
-        am.setStreamVolume(AudioManager.STREAM_ALARM, desired.coerceIn(0, max), 0)
+    /** Re-apply the loudness trim to the recording that is playing now, so dragging
+     *  the Talk slider is heard live (see [BellStore.talkGain]). */
+    private fun applyGainLive(pct: Int) {
+        val g = gainScalar(pct)
+        runCatching { player?.setVolume(g, g) }
     }
 
     private fun finish() {
         ticker?.cancel()
         runCatching { player?.release() }
         player = null
+        if (active === this) active = null
         runCatching { if (startupLock?.isHeld == true) startupLock?.release() }
         startupLock = null
         PlaybackState.clear()
@@ -279,6 +276,15 @@ class BellService : Service() {
     }
 
     companion object {
+        /** The live service instance, so the Talk slider can re-trim a playing
+         *  recording without an intent round-trip. Single process, main thread. */
+        @Volatile private var active: BellService? = null
+
+        /** Re-apply the talk trim to whatever is playing now. No-op if nothing is. */
+        fun setGain(pct: Int) {
+            active?.applyGainLive(pct)
+        }
+
         const val ACTION_STOP = "com.freedomfighter.retreattimer.STOP"
         const val ACTION_TOGGLE = "com.freedomfighter.retreattimer.TOGGLE"
         const val ACTION_BACK10 = "com.freedomfighter.retreattimer.BACK10"

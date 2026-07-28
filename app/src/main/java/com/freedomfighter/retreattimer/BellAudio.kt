@@ -2,27 +2,22 @@ package com.freedomfighter.retreattimer
 
 import android.content.Context
 import android.media.AudioAttributes
-import android.media.AudioManager
 import android.media.MediaPlayer
 
 /**
- * Plays the three-bell recording for the in-app "Test" buttons. It sets the alarm
- * stream to the same level the real ring will use, so the teacher hears in advance
- * exactly how loud the room will be when the bell fires for real.
+ * Plays the three-bell recording for the in-app "Test" buttons at the bell trim
+ * (see [BellStore.bellGain]) — a software gain applied to the player, so the
+ * preview is a true preview of room loudness on the phone speaker and, crucially,
+ * over a Bluetooth speaker too.
  */
 object BellAudio {
     private var player: MediaPlayer? = null
 
-    /** Test the bells at the exact alarm volume that will be used for real.
-     *  Defaults to the currently-selected sound, or a specific [rawRes] preview. */
+    /** Preview the bells at the current bell trim. Defaults to the selected sound,
+     *  or a specific [rawRes]. */
     fun playTest(ctx: Context, rawRes: Int = BellSounds.selected(ctx).rawRes) {
         stop()
-        val desired = BellStore.alarmVolume(ctx)
-        if (desired >= 0) {
-            val am = ctx.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-            val max = am.getStreamMaxVolume(AudioManager.STREAM_ALARM)
-            am.setStreamVolume(AudioManager.STREAM_ALARM, desired.coerceIn(0, max), 0)
-        }
+        val gain = gainScalar(BellStore.bellGain(ctx))
         runCatching {
             player = MediaPlayer().apply {
                 setAudioAttributes(
@@ -36,6 +31,7 @@ object BellAudio {
                 afd.close()
                 setOnCompletionListener { stop() }
                 prepare()
+                setVolume(gain, gain)
                 // Match the room's Bluetooth speaker, not the phone — after
                 // prepare(), or the hint is dropped (see [preferBluetoothOutput]).
                 val pinned = preferBluetoothOutput(ctx)
@@ -43,6 +39,13 @@ object BellAudio {
                 if (!pinned) preferBluetoothOutput(ctx)
             }
         }
+    }
+
+    /** Re-apply the trim to a preview that is already playing, so dragging the
+     *  slider is heard live. No-op when nothing is playing. */
+    fun setGain(pct: Int) {
+        val g = gainScalar(pct)
+        runCatching { player?.setVolume(g, g) }
     }
 
     fun stop() {

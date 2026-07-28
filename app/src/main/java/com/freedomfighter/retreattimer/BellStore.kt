@@ -41,8 +41,8 @@ object BellStore {
     private const val KEY_BELLS = "bells"
     private const val KEY_TALKS = "talks"
     private const val KEY_NEXT_ID = "next_id"
-    private const val KEY_ALARM_VOLUME = "alarm_volume" // -1 = leave system alarm volume untouched
-    private const val KEY_TALK_VOLUME = "talk_volume"   // -1 = leave system alarm volume untouched
+    private const val KEY_BELL_GAIN = "bell_gain_pct" // 0–100 software trim, default 100
+    private const val KEY_TALK_GAIN = "talk_gain_pct" // 0–100 software trim, default 100
     private const val KEY_KDRIVE_URL = "kdrive_url"
     private const val KEY_PODCAST_URL = "podcast_url"
     private const val KEY_BELL_SOUND = "bell_sound"
@@ -128,23 +128,24 @@ object BellStore {
      *  cancel alarms for items that have since been deleted. */
     fun highWatermarkId(ctx: Context): Long = prefs(ctx).getLong(KEY_NEXT_ID, 1L)
 
-    /** Desired STREAM_ALARM volume for the bells, or -1 to leave whatever the
-     *  system has. Talks have their own level — see [talkVolume]. */
-    fun alarmVolume(ctx: Context): Int = prefs(ctx).getInt(KEY_ALARM_VOLUME, -1)
+    /** Per-source loudness trim, 0–100%, default 100 (full). Overall loudness is
+     *  the phone's / Bluetooth speaker's own volume; this only attenuates the
+     *  bells *below* that, applied as a software gain inside the player so it works
+     *  over Bluetooth where the alarm-stream volume has no effect. Talks trim
+     *  separately — see [talkGain] — so the two can be matched for an unattended day. */
+    fun bellGain(ctx: Context): Int = prefs(ctx).getInt(KEY_BELL_GAIN, 100)
 
-    fun setAlarmVolume(ctx: Context, value: Int) {
-        prefs(ctx).edit().putInt(KEY_ALARM_VOLUME, value).apply()
+    fun setBellGain(ctx: Context, value: Int) {
+        prefs(ctx).edit().putInt(KEY_BELL_GAIN, value.coerceIn(0, 100)).apply()
     }
 
-    /** Desired STREAM_ALARM volume for dharma talks, or -1 to leave whatever the
-     *  system has. Spoken recordings usually need to be markedly louder than a
-     *  bowl strike to carry across a hall, so this is set independently of the
-     *  bells. Until the teacher sets it, it follows the bell level — which is
-     *  what talks used before the two were split, so upgrading changes nothing. */
-    fun talkVolume(ctx: Context): Int = prefs(ctx).getInt(KEY_TALK_VOLUME, alarmVolume(ctx))
+    /** Per-source loudness trim for dharma talks, 0–100%, default 100. Spoken
+     *  recordings and bowl strikes are rarely at the same recorded level, so this
+     *  is trimmed independently of the bells to keep an unattended day balanced. */
+    fun talkGain(ctx: Context): Int = prefs(ctx).getInt(KEY_TALK_GAIN, 100)
 
-    fun setTalkVolume(ctx: Context, value: Int) {
-        prefs(ctx).edit().putInt(KEY_TALK_VOLUME, value).apply()
+    fun setTalkGain(ctx: Context, value: Int) {
+        prefs(ctx).edit().putInt(KEY_TALK_GAIN, value.coerceIn(0, 100)).apply()
     }
 
     /** Key of the chosen bell sound (see [BellSounds]); defaults to the first. */

@@ -50,3 +50,16 @@ fun bluetoothOutput(ctx: Context): AudioDeviceInfo? {
  */
 fun AudioRouting.preferBluetoothOutput(ctx: Context): Boolean =
     runCatching { bluetoothOutput(ctx)?.let { setPreferredDevice(it) } == true }.getOrDefault(false)
+
+/**
+ * Turn a 0–100% loudness trim into a [android.media.MediaPlayer.setVolume] amplitude
+ * scalar. The curve is squared so equal slider steps feel like roughly equal steps
+ * to the ear (loudness perception is far from linear in amplitude); 100% is unity
+ * (no attenuation) and 0% is silence. Applying the trim inside the player, rather
+ * than via the alarm stream, is what makes it work over a Bluetooth speaker — where
+ * A2DP absolute volume otherwise ignores `setStreamVolume`.
+ */
+fun gainScalar(pct: Int): Float {
+    val f = pct.coerceIn(0, 100) / 100f
+    return f * f
+}
