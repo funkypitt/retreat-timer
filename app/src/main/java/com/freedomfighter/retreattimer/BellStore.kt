@@ -7,7 +7,12 @@ import java.io.File
 
 /**
  * A scheduled playback at a wall-clock time of day. When [talkUri] is null it
- * rings the built-in three bells; otherwise it plays the chosen dharma talk.
+ * rings the built-in bells; otherwise it plays the chosen dharma talk.
+ *
+ * [singleStrike] chooses this slot's bell length: three strikes (the default, and
+ * what every bell was before 1.11) or one. It is per slot on purpose — the same
+ * retreat often wants three bells to open and close a sitting but a single bell
+ * for a smaller marker — and it is independent of which bowl is selected.
  */
 data class BellTime(
     val id: Long,
@@ -16,6 +21,7 @@ data class BellTime(
     val enabled: Boolean = true,
     val talkUri: String? = null,
     val talkTitle: String? = null,
+    val singleStrike: Boolean = false,
 ) {
     /** Minutes since midnight — used for sorting. */
     val minuteOfDay: Int get() = hour * 60 + minute
@@ -66,6 +72,8 @@ object BellStore {
                     enabled = o.optBoolean("enabled", true),
                     talkUri = o.optString("talkUri", "").ifEmpty { null },
                     talkTitle = o.optString("talkTitle", "").ifEmpty { null },
+                    // Absent in schedules written before 1.11 — those are all three-bell.
+                    singleStrike = o.optBoolean("single", false),
                 )
             }.sortedBy { it.minuteOfDay }
         }.getOrDefault(emptyList())
@@ -79,6 +87,7 @@ object BellStore {
                 put("hour", b.hour)
                 put("minute", b.minute)
                 put("enabled", b.enabled)
+                if (b.singleStrike) put("single", true)
                 b.talkUri?.let { put("talkUri", it) }
                 b.talkTitle?.let { put("talkTitle", it) }
             })

@@ -19,6 +19,7 @@ object BellScheduler {
     const val EXTRA_BELL_ID = "bell_id"
     const val EXTRA_TALK_URI = "talk_uri"
     const val EXTRA_TALK_TITLE = "talk_title"
+    const val EXTRA_SINGLE_STRIKE = "single_strike"
     private const val RING_ACTION = "com.freedomfighter.retreattimer.RING"
 
     /** Cancel everything we previously scheduled, then arm the next occurrence of
@@ -73,6 +74,7 @@ object BellScheduler {
         val intent = Intent(ctx, AlarmReceiver::class.java).apply {
             action = RING_ACTION
             putExtra(EXTRA_BELL_ID, bell.id)
+            putExtra(EXTRA_SINGLE_STRIKE, bell.singleStrike)
             bell.talkUri?.let { putExtra(EXTRA_TALK_URI, it) }
             bell.talkTitle?.let { putExtra(EXTRA_TALK_TITLE, it) }
             // Unique data per item so PendingIntents never collapse into one.

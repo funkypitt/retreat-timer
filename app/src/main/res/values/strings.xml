@@ -2,9 +2,10 @@
 <resources>
     <string name="app_name">Retreat Timer</string>
     <string name="channel_ringing">Bell ringing</string>
-    <string name="channel_ringing_desc">Plays the three bells at scheduled times.</string>
+    <string name="channel_ringing_desc">Plays the bells at scheduled times.</string>
     <string name="ringing_title">Retreat Timer</string>
     <string name="ringing_text">Ringing the three bells…</string>
+    <string name="ringing_text_one">Ringing the bell…</string>
     <string name="playing_text">Playing dharma talk…</string>
     <string name="stop">Stop</string>
     <string name="play">Play</string>

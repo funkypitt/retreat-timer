@@ -36,6 +36,10 @@ class BellService : Service() {
     private var player: MediaPlayer? = null
     private var startupLock: PowerManager.WakeLock? = null
     private var currentTitle: String? = null
+
+    /** What the notification says before a duration is known — "Ringing the three
+     *  bells…", "…the bell…", or "Playing dharma talk…". */
+    private var currentTextRes: Int = R.string.ringing_text
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private var ticker: Job? = null
 
@@ -65,7 +69,13 @@ class BellService : Service() {
     private fun startPlayback(intent: Intent?) {
         val talkUri = intent?.getStringExtra(BellScheduler.EXTRA_TALK_URI)
         val talkTitle = intent?.getStringExtra(BellScheduler.EXTRA_TALK_TITLE)
+        val single = intent?.getBooleanExtra(BellScheduler.EXTRA_SINGLE_STRIKE, false) ?: false
         currentTitle = talkTitle ?: getString(R.string.ringing_title)
+        currentTextRes = when {
+            talkUri != null -> R.string.playing_text
+            single -> R.string.ringing_text_one
+            else -> R.string.ringing_text
+        }
 
         // Replace any in-progress playback.
         runCatching { player?.release() }
@@ -88,7 +98,7 @@ class BellService : Service() {
                 if (talkUri != null) {
                     setDataSource(this@BellService, Uri.parse(talkUri))
                 } else {
-                    val afd = resources.openRawResourceFd(BellSounds.selected(this@BellService).rawRes)
+                    val afd = resources.openRawResourceFd(BellSounds.rawRes(this@BellService, single))
                     setDataSource(afd.fileDescriptor, afd.startOffset, afd.length)
                     afd.close()
                 }
@@ -204,7 +214,7 @@ class BellService : Service() {
         val text = if (duration > 0) {
             "${formatClock(position)} / ${formatClock(duration)}  ·  ${formatClock(remaining)} left"
         } else {
-            getString(if (currentTitle == getString(R.string.ringing_title)) R.string.ringing_text else R.string.playing_text)
+            getString(currentTextRes)
         }
 
         val builder = NotificationCompat.Builder(this, CHANNEL_ID)

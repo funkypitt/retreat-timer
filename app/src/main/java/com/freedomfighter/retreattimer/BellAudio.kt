@@ -5,7 +5,7 @@ import android.media.AudioAttributes
 import android.media.MediaPlayer
 
 /**
- * Plays the three-bell recording for the in-app "Test" buttons at the bell trim
+ * Plays a bell recording for the in-app "Test" buttons at the bell trim
  * (see [BellStore.bellGain]) — a software gain applied to the player, so the
  * preview is a true preview of room loudness on the phone speaker and, crucially,
  * over a Bluetooth speaker too.
@@ -13,9 +13,9 @@ import android.media.MediaPlayer
 object BellAudio {
     private var player: MediaPlayer? = null
 
-    /** Preview the bells at the current bell trim. Defaults to the selected sound,
-     *  or a specific [rawRes]. */
-    fun playTest(ctx: Context, rawRes: Int = BellSounds.selected(ctx).rawRes) {
+    /** Preview [rawRes] at the current bell trim. All bell recordings are
+     *  loudness-matched, so any of them judges the level equally well. */
+    fun playTest(ctx: Context, rawRes: Int) {
         stop()
         val gain = gainScalar(BellStore.bellGain(ctx))
         runCatching {

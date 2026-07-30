@@ -258,8 +258,9 @@ private fun ScheduleTab() {
         TimeDialog(
             initialHour = req.hour,
             initialMinute = req.minute,
+            initialSingle = req.single,
             onDismiss = { timeRequest = null },
-            onPicked = { h, m -> timeRequest = null; req.onPicked(h, m) },
+            onPicked = { h, m, s -> timeRequest = null; req.onPicked(h, m, s) },
         )
     }
 
@@ -280,14 +281,22 @@ private fun ScheduleTab() {
                 bell = bell,
                 onToggle = { persist(bells.map { if (it.id == bell.id) it.copy(enabled = !it.enabled) else it }) },
                 onEdit = {
-                    timeRequest = TimeRequest(bell.hour, bell.minute) { h, m ->
-                        persist(bells.map { if (it.id == bell.id) it.copy(hour = h, minute = m) else it })
+                    // A talk keeps no strike count, so it opens the plain picker.
+                    timeRequest = TimeRequest(
+                        bell.hour, bell.minute,
+                        single = if (bell.isTalk) null else bell.singleStrike,
+                    ) { h, m, s ->
+                        persist(
+                            bells.map {
+                                if (it.id == bell.id) it.copy(hour = h, minute = m, singleStrike = s) else it
+                            },
+                        )
                     }
                 },
                 onDelete = { persist(bells.filterNot { it.id == bell.id }) },
                 onPlay = {
                     if (bell.isTalk) BellService.playTalk(ctx, bell.talkUri!!, bell.talkTitle ?: "Dharma talk")
-                    else BellAudio.playTest(ctx)
+                    else BellAudio.playTest(ctx, BellSounds.rawRes(ctx, bell.singleStrike))
                 },
             )
         }
@@ -297,8 +306,13 @@ private fun ScheduleTab() {
                 // Seeded with the current time, never an offset from the last bell:
                 // every bell is a time the teacher chose on purpose.
                 val (h, m) = nowHourMinute()
-                timeRequest = TimeRequest(h, m) { ph, pm ->
-                    persist(bells + BellTime(id = BellStore.nextId(ctx), hour = ph, minute = pm, enabled = true))
+                timeRequest = TimeRequest(h, m, single = false) { ph, pm, ps ->
+                    persist(
+                        bells + BellTime(
+                            id = BellStore.nextId(ctx), hour = ph, minute = pm,
+                            enabled = true, singleStrike = ps,
+                        ),
+                    )
                 }
             }
         }
@@ -325,17 +339,24 @@ private fun ScheduleRow(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                TextButton(onClick = onEdit, contentPadding = PaddingValues(0.dp)) {
-                    Text(
-                        bell.time(),
-                        fontFamily = FontFamily.Serif,
-                        fontSize = 32.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = if (bell.enabled) Ink else Ink.copy(alpha = 0.35f),
-                    )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    TextButton(onClick = onEdit, contentPadding = PaddingValues(0.dp)) {
+                        Text(
+                            bell.time(),
+                            fontFamily = FontFamily.Serif,
+                            fontSize = 32.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (bell.enabled) Ink else Ink.copy(alpha = 0.35f),
+                        )
+                    }
+                    if (!bell.isTalk) StrikeBadge(bell.singleStrike, bell.enabled)
                 }
                 Text(
-                    if (bell.isTalk) "🎧 ${bell.talkTitle}" else "🔔 Three bells",
+                    when {
+                        bell.isTalk -> "🎧 ${bell.talkTitle}"
+                        bell.singleStrike -> "🔔 One bell"
+                        else -> "🔔 Three bells"
+                    },
                     fontSize = 12.sp,
                     color = if (bell.enabled) Accent else Ink.copy(alpha = 0.3f),
                     maxLines = 1,
@@ -354,6 +375,27 @@ private fun ScheduleRow(
                 Icon(Icons.Filled.Delete, contentDescription = "Delete", tint = Ink.copy(alpha = 0.4f))
             }
         }
+    }
+}
+
+/** The "×1" / "×3" mark beside a bell's time, so one glance down the schedule
+ *  shows which slots ring once and which ring three times — without opening any
+ *  of them. Talks carry no strike count and get no badge. */
+@Composable
+private fun StrikeBadge(single: Boolean, enabled: Boolean) {
+    val tint = if (enabled) Accent else Ink.copy(alpha = 0.3f)
+    Surface(
+        shape = RoundedCornerShape(8.dp),
+        color = tint.copy(alpha = 0.12f),
+        modifier = Modifier.padding(start = 4.dp),
+    ) {
+        Text(
+            if (single) "×1" else "×3",
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Bold,
+            color = tint,
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+        )
     }
 }
 
@@ -397,8 +439,9 @@ private fun LibraryTab(onGoToSchedule: () -> Unit) {
         TimeDialog(
             initialHour = req.hour,
             initialMinute = req.minute,
+            initialSingle = req.single,
             onDismiss = { timeRequest = null },
-            onPicked = { h, m -> timeRequest = null; req.onPicked(h, m) },
+            onPicked = { h, m, s -> timeRequest = null; req.onPicked(h, m, s) },
         )
     }
 
@@ -443,7 +486,8 @@ private fun LibraryTab(onGoToSchedule: () -> Unit) {
 
     fun scheduleTalk(talk: DharmaTalk) {
         val (nowH, nowM) = nowHourMinute()
-        timeRequest = TimeRequest(nowH, nowM) { h, m ->
+        // A talk has no strike count, so the picker asks for a time only.
+        timeRequest = TimeRequest(nowH, nowM) { h, m, _ ->
             val item = BellTime(
                 id = BellStore.nextId(ctx), hour = h, minute = m, enabled = true,
                 talkUri = talk.uri, talkTitle = talk.title,
@@ -628,8 +672,9 @@ private fun ReliabilityCard(tick: Long) {
     }
 }
 
-/** Choose which bowl rings for every bell entry. All three are loudness-matched,
- *  so switching is purely about timbre, not volume. Each plays three full strikes. */
+/** Choose which bowl rings for every bell entry. All four are loudness-matched,
+ *  so switching is purely about timbre, not volume. How many times it strikes is
+ *  set per bell entry, not here — see [StrikeChoice]. */
 @Composable
 private fun BellSoundCard() {
     val ctx = LocalContext.current
@@ -667,7 +712,8 @@ private fun BellSoundCard() {
                 }
             }
             Text(
-                "Each bell rings the chosen bowl three times, letting it ring out fully between strikes.",
+                "The chosen bowl rings out fully between strikes. Whether a slot rings " +
+                    "three times or once is set on the bell itself — tap its time.",
                 fontSize = 12.sp, color = Ink.copy(alpha = 0.6f), modifier = Modifier.padding(top = 2.dp),
             )
         }
@@ -681,12 +727,15 @@ private fun BellVolumeCard() {
     val ctx = LocalContext.current
     VolumeCard(
         title = "Bells",
-        testLabel = "Test bells",
-        hint = "Trims the bells down from the phone/speaker volume. 100% = full. Test to hear it.",
+        testLabel = "Test bell",
+        hint = "Trims the bells down from the phone/speaker volume. 100% = full. " +
+            "Test rings one bell — enough to judge the level without sitting through three.",
         storedPct = BellStore.bellGain(ctx),
         onStore = { BellStore.setBellGain(ctx, it) },
         onLiveApply = { BellAudio.setGain(it) },
-        onTest = { BellAudio.playTest(ctx) },
+        // One strike, deliberately: this is a level check, and every recording is
+        // loudness-matched, so three would only make the same point three times.
+        onTest = { BellAudio.playTest(ctx, BellSounds.rawRes(ctx, single = true)) },
     )
 }
 
@@ -850,7 +899,11 @@ private fun NextBellLine(bells: List<BellTime>, tick: Long) {
     } else {
         val mins = TimeUnit.MILLISECONDS.toMinutes((upcoming.second - System.currentTimeMillis()).coerceAtLeast(0))
         val rel = if (mins >= 60) "in ${mins / 60}h ${mins % 60}min" else "in ${mins}min"
-        val what = if (upcoming.first.isTalk) "🎧 ${upcoming.first.talkTitle}" else "🔔 three bells"
+        val what = when {
+            upcoming.first.isTalk -> "🎧 ${upcoming.first.talkTitle}"
+            upcoming.first.singleStrike -> "🔔 one bell"
+            else -> "🔔 three bells"
+        }
         "Next at ${upcoming.first.time()} — $what — $rel"
     }
     Text(
@@ -866,7 +919,8 @@ private fun NextBellLine(bells: List<BellTime>, tick: Long) {
 private fun FooterNote() {
     Text(
         "Tip: leave the phone plugged in. Each bell entry plays three singing-bowl " +
-            "strikes; scheduled talks play your chosen recording.",
+            "strikes, or one if you set it to (×3 / ×1 beside its time); scheduled " +
+            "talks play your chosen recording.",
         fontSize = 12.sp, color = Ink.copy(alpha = 0.55f), textAlign = TextAlign.Center,
         modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
     )
@@ -1145,8 +1199,15 @@ private fun formatDuration(ms: Long): String {
 }
 
 /** A pending "pick a time" interaction: what to seed the picker with, and what to
- *  do with the answer. Held in state so the Compose dialog can be shown. */
-private data class TimeRequest(val hour: Int, val minute: Int, val onPicked: (Int, Int) -> Unit)
+ *  do with the answer. Held in state so the Compose dialog can be shown.
+ *  [single] carries the slot's current strike count, or null for a talk — which
+ *  has none, and so is asked for a time only. */
+private data class TimeRequest(
+    val hour: Int,
+    val minute: Int,
+    val single: Boolean? = null,
+    val onPicked: (Int, Int, Boolean) -> Unit,
+)
 
 private fun nowHourMinute(): Pair<Int, Int> {
     val c = java.util.Calendar.getInstance()
@@ -1164,8 +1225,9 @@ private fun nowHourMinute(): Pair<Int, Int> {
 private fun TimeDialog(
     initialHour: Int,
     initialMinute: Int,
+    initialSingle: Boolean?,
     onDismiss: () -> Unit,
-    onPicked: (Int, Int) -> Unit,
+    onPicked: (Int, Int, Boolean) -> Unit,
 ) {
     val state = rememberTimePickerState(
         initialHour = initialHour,
@@ -1176,6 +1238,7 @@ private fun TimeDialog(
         is24Hour = true,
     )
     var typing by remember { mutableStateOf(true) }
+    var single by remember { mutableStateOf(initialSingle ?: false) }
 
     // A plain Dialog rather than AlertDialog: the dial is wider than the platform
     // default dialog width and would be clipped inside one.
@@ -1192,6 +1255,9 @@ private fun TimeDialog(
                 )
                 Spacer(Modifier.height(16.dp))
                 if (typing) TimeInput(state = state) else TimePicker(state = state)
+                if (initialSingle != null) {
+                    StrikeChoice(single = single, onChange = { single = it })
+                }
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                     TextButton(onClick = { typing = !typing }) {
                         Icon(
@@ -1203,9 +1269,40 @@ private fun TimeDialog(
                     }
                     Spacer(Modifier.weight(1f))
                     TextButton(onClick = onDismiss) { Text("Cancel", color = Ink.copy(alpha = 0.6f)) }
-                    TextButton(onClick = { onPicked(state.hour, state.minute) }) {
+                    TextButton(onClick = { onPicked(state.hour, state.minute, single) }) {
                         Text("Set", color = Accent, fontWeight = FontWeight.SemiBold)
                     }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * How many times this bell strikes. Three is the default and the long-standing
+ * behaviour — the full opening/closing signal; one is for the smaller markers in a
+ * day where three would be too much. It applies whichever bowl is selected, and
+ * each choice can be heard here at the current bell trim before it is set.
+ */
+@Composable
+private fun StrikeChoice(single: Boolean, onChange: (Boolean) -> Unit) {
+    val ctx = LocalContext.current
+    Column(Modifier.fillMaxWidth().padding(top = 8.dp)) {
+        Text("This bell rings", fontWeight = FontWeight.SemiBold, fontSize = 13.sp, color = Ink)
+        listOf(false to "Three bells", true to "One bell").forEach { (isSingle, label) ->
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                RadioButton(
+                    selected = single == isSingle,
+                    onClick = { onChange(isSingle) },
+                    colors = RadioButtonDefaults.colors(selectedColor = Accent),
+                )
+                Text(
+                    label,
+                    fontFamily = FontFamily.Serif, fontSize = 16.sp, color = Ink,
+                    modifier = Modifier.weight(1f),
+                )
+                TextButton(onClick = { BellAudio.playTest(ctx, BellSounds.rawRes(ctx, isSingle)) }) {
+                    Icon(Icons.Filled.PlayArrow, contentDescription = "Preview", tint = Accent)
                 }
             }
         }

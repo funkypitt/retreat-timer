@@ -20,6 +20,10 @@ class AlarmReceiver : BroadcastReceiver() {
 
         val serviceIntent = Intent(context, BellService::class.java).apply {
             putExtra(BellScheduler.EXTRA_BELL_ID, id)
+            putExtra(
+                BellScheduler.EXTRA_SINGLE_STRIKE,
+                intent.getBooleanExtra(BellScheduler.EXTRA_SINGLE_STRIKE, false),
+            )
             intent.getStringExtra(BellScheduler.EXTRA_TALK_URI)?.let {
                 putExtra(BellScheduler.EXTRA_TALK_URI, it)
             }
