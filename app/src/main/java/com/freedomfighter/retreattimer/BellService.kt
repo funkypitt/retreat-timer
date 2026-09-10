@@ -37,6 +37,9 @@ class BellService : Service() {
     private var startupLock: PowerManager.WakeLock? = null
     private var currentTitle: String? = null
 
+    /** Plays still to come of the custom recording: a three-bell slot plays it three times over. */
+    private var repeatsLeft = 1
+
     /** What the notification says before a duration is known — "Ringing the three
      *  bells…", "…the bell…", or "Playing dharma talk…". */
     private var currentTextRes: Int = R.string.ringing_text
@@ -95,14 +98,18 @@ class BellService : Service() {
                         .build(),
                 )
                 setWakeMode(this@BellService, PowerManager.PARTIAL_WAKE_LOCK)
+                val custom = if (talkUri == null && BellSounds.isCustom(this@BellService)) BellSounds.customFile(this@BellService) else null
+                repeatsLeft = if (custom != null) BellSounds.customRepeats(single) else 1
                 if (talkUri != null) {
                     setDataSource(this@BellService, Uri.parse(talkUri))
+                } else if (custom != null) {
+                    setDataSource(custom.absolutePath)
                 } else {
                     val afd = resources.openRawResourceFd(BellSounds.rawRes(this@BellService, single))
                     setDataSource(afd.fileDescriptor, afd.startOffset, afd.length)
                     afd.close()
                 }
-                setOnCompletionListener { finish() }
+                setOnCompletionListener { if (--repeatsLeft > 0) runCatching { seekTo(0); start() }.onFailure { finish() } else finish() }
                 setOnErrorListener { _, _, _ -> finish(); true }
                 prepare()
                 setVolume(gain, gain)

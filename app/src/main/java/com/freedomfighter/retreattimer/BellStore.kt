@@ -52,6 +52,7 @@ object BellStore {
     private const val KEY_KDRIVE_URL = "kdrive_url"
     private const val KEY_PODCAST_URL = "podcast_url"
     private const val KEY_BELL_SOUND = "bell_sound"
+    private const val KEY_CUSTOM_BELL_NAME = "custom_bell_name"
     private const val KEY_KEEP_SPEAKER_AWAKE = "keep_speaker_awake"
 
     private fun prefs(ctx: Context) =
@@ -162,6 +163,13 @@ object BellStore {
 
     fun setBellSoundKey(ctx: Context, key: String) {
         prefs(ctx).edit().putString(KEY_BELL_SOUND, key).apply()
+    }
+
+    /** Display name of the teacher's own recording (see [BellSounds.customFile]). */
+    fun customBellName(ctx: Context): String = prefs(ctx).getString(KEY_CUSTOM_BELL_NAME, "") ?: ""
+
+    fun setCustomBellName(ctx: Context, name: String) {
+        prefs(ctx).edit().putString(KEY_CUSTOM_BELL_NAME, name).apply()
     }
 
     /** Whether to keep a Bluetooth speaker awake between bells with a faint

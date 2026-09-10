@@ -296,7 +296,7 @@ private fun ScheduleTab() {
                 onDelete = { persist(bells.filterNot { it.id == bell.id }) },
                 onPlay = {
                     if (bell.isTalk) BellService.playTalk(ctx, bell.talkUri!!, bell.talkTitle ?: "Dharma talk")
-                    else BellAudio.playTest(ctx, BellSounds.rawRes(ctx, bell.singleStrike))
+                    else BellAudio.playTestSelected(ctx, bell.singleStrike)
                 },
             )
         }
@@ -711,6 +711,46 @@ private fun BellSoundCard() {
                     }
                 }
             }
+            // The teacher's own recording, in place of the single strike.
+            var customName by remember { mutableStateOf(BellSounds.customName(ctx)) }
+            var hasCustom by remember { mutableStateOf(BellSounds.customFile(ctx) != null) }
+            val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+                if (uri != null && BellSounds.importCustom(ctx, uri)) {
+                    customName = BellSounds.customName(ctx)
+                    hasCustom = true
+                    selectedKey = BellSounds.CUSTOM
+                    BellAudio.playTestCustom(ctx)
+                }
+            }
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                RadioButton(
+                    selected = selectedKey == BellSounds.CUSTOM,
+                    enabled = hasCustom,
+                    onClick = {
+                        selectedKey = BellSounds.CUSTOM
+                        BellStore.setBellSoundKey(ctx, BellSounds.CUSTOM)
+                    },
+                    colors = RadioButtonDefaults.colors(selectedColor = Accent),
+                )
+                Text(
+                    if (hasCustom) customName else "Your own sound",
+                    fontFamily = FontFamily.Serif, fontSize = 16.sp, color = Ink,
+                    modifier = Modifier.weight(1f),
+                )
+                if (hasCustom) {
+                    TextButton(onClick = { BellAudio.playTestCustom(ctx) }) {
+                        Icon(Icons.Filled.PlayArrow, contentDescription = "Preview", tint = Accent)
+                    }
+                }
+                TextButton(onClick = { filePicker.launch(arrayOf("audio/*", "application/octet-stream")) }) {
+                    Text(if (hasCustom) "Change" else "Choose file", color = Accent)
+                }
+            }
+            Text(
+                "Your own sound is an mp3 or wav file from the phone; it stands in for the " +
+                    "single strike, and a three-bell slot plays it three times over.",
+                fontSize = 12.sp, color = Ink.copy(alpha = 0.6f), modifier = Modifier.padding(top = 2.dp),
+            )
             Text(
                 "The chosen bowl rings out fully between strikes. Whether a slot rings " +
                     "three times or once is set on the bell itself — tap its time.",
@@ -735,7 +775,7 @@ private fun BellVolumeCard() {
         onLiveApply = { BellAudio.setGain(it) },
         // One strike, deliberately: this is a level check, and every recording is
         // loudness-matched, so three would only make the same point three times.
-        onTest = { BellAudio.playTest(ctx, BellSounds.rawRes(ctx, single = true)) },
+        onTest = { BellAudio.playTestSelected(ctx, single = true) },
     )
 }
 
@@ -1301,7 +1341,7 @@ private fun StrikeChoice(single: Boolean, onChange: (Boolean) -> Unit) {
                     fontFamily = FontFamily.Serif, fontSize = 16.sp, color = Ink,
                     modifier = Modifier.weight(1f),
                 )
-                TextButton(onClick = { BellAudio.playTest(ctx, BellSounds.rawRes(ctx, isSingle)) }) {
+                TextButton(onClick = { BellAudio.playTestSelected(ctx, isSingle) }) {
                     Icon(Icons.Filled.PlayArrow, contentDescription = "Preview", tint = Accent)
                 }
             }

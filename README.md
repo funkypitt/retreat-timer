@@ -58,6 +58,11 @@ Keep the phone plugged in and the bells will play all day on their own.
 ./gradlew assembleDebug
 ```
 
+**Your own sound.** The bell-sound card also takes an mp3 or wav file from the phone
+("Choose file"). It stands in for the single strike; a three-bell slot plays it three
+times over. The file is copied into the app's private files, so it stays readable from an
+alarm after a reboot (a picked document's grant would not).
+
 Five selectable bell sounds (`app/src/main/res/raw/bell_*.mp3`) — singing bell,
 Tibetan E♭ bowl, gong bowl, Satipanya, and enpleineconscience.ch. Each is one
 bowl struck three times, the strike allowed to ring out before the next. Each

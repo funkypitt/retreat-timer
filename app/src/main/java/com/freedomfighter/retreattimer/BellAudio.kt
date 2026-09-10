@@ -15,8 +15,26 @@ object BellAudio {
 
     /** Preview [rawRes] at the current bell trim. All bell recordings are
      *  loudness-matched, so any of them judges the level equally well. */
-    fun playTest(ctx: Context, rawRes: Int) {
+    fun playTest(ctx: Context, rawRes: Int) = playTest(ctx, rawRes, null, 1)
+
+    /** Preview whatever is chosen, at the length a slot would ring it — the custom
+     *  recording repeats three times for a three-bell slot, like the real ring. */
+    fun playTestSelected(ctx: Context, single: Boolean) {
+        val custom = BellSounds.customFile(ctx)?.takeIf { BellSounds.isCustom(ctx) }
+        if (custom != null) playTest(ctx, 0, custom.absolutePath, BellSounds.customRepeats(single))
+        else playTest(ctx, BellSounds.rawRes(ctx, single))
+    }
+
+    /** Preview the imported recording once, whether or not it is chosen. */
+    fun playTestCustom(ctx: Context) {
+        BellSounds.customFile(ctx)?.let { playTest(ctx, 0, it.absolutePath, 1) }
+    }
+
+    private var repeatsLeft = 1
+
+    private fun playTest(ctx: Context, rawRes: Int, path: String?, repeats: Int) {
         stop()
+        repeatsLeft = repeats
         val gain = gainScalar(BellStore.bellGain(ctx))
         runCatching {
             player = MediaPlayer().apply {
@@ -26,10 +44,12 @@ object BellAudio {
                         .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
                         .build(),
                 )
-                val afd = ctx.resources.openRawResourceFd(rawRes)
-                setDataSource(afd.fileDescriptor, afd.startOffset, afd.length)
-                afd.close()
-                setOnCompletionListener { stop() }
+                if (path != null) setDataSource(path) else {
+                    val afd = ctx.resources.openRawResourceFd(rawRes)
+                    setDataSource(afd.fileDescriptor, afd.startOffset, afd.length)
+                    afd.close()
+                }
+                setOnCompletionListener { if (--repeatsLeft > 0) { runCatching { seekTo(0); start() } } else stop() }
                 prepare()
                 setVolume(gain, gain)
                 // Match the room's Bluetooth speaker, not the phone — after
