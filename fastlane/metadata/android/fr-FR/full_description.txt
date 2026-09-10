@@ -1,0 +1,16 @@
+Retreat Timer fait sonner des bols chantants à des heures fixes de la journée — le signal du début ou de la fin d'une assise de méditation — pour qu'une retraite suive son horaire même en l'absence de l'enseignant. Chaque créneau sonne trois cloches (par défaut) ou une seule, au choix.
+
+Les cloches sonnent quoi qu'il arrive : écran verrouillé, veille profonde, mode Doze, heures sans surveillance. Chaque cloche est programmée avec le mécanisme d'alarme exacte qu'utilise l'application Horloge du système, puis jouée par un service au premier plan tenant un wake lock, via le flux audio d'alarme au volume réglé. Les alarmes sont réarmées après un redémarrage, un changement d'heure ou une mise à jour.
+
+Fonctions :
+- Autant de créneaux quotidiens que souhaité, chacun modifiable et activable
+- Trois cloches ou une seule par créneau, avec pré-écoute
+- Cinq enregistrements de bols au volume harmonisé, ou votre propre fichier mp3/wav
+- Enseignements programmés depuis le téléphone, un lien de partage kDrive ou un flux podcast
+- Volumes séparés pour les cloches et les enseignements, avec bouton de test
+- Mini-lecteur avec barre de progression glissable, ±10 s, reprise et arrêt
+- Signal silencieux optionnel pour garder un haut-parleur Bluetooth connecté entre les cloches
+
+Sans publicité, sans pistage, sans compte. Les permissions se limitent aux alarmes exactes, au démarrage, au wake lock, à la lecture en service au premier plan et aux notifications.
+
+Pierre Gallaz · développé avec Claude Code

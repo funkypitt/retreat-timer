@@ -125,3 +125,11 @@ ffmpeg -i enpleineconscience.wav \
 
 No ads, no tracking, no accounts. Permissions are limited to exact alarms, boot
 receipt, wake lock, foreground-service playback, and notifications.
+
+## Crédits / Credits
+
+© 2026 Pierre Gallaz. Développé avec [Claude Code](https://claude.com/claude-code) (Anthropic).
+Licence MIT, voir `LICENSE`.
+
+© 2026 Pierre Gallaz. Developed with [Claude Code](https://claude.com/claude-code) (Anthropic).
+MIT licence, see `LICENSE`.

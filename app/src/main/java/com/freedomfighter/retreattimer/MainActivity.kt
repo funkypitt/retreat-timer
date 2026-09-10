@@ -46,6 +46,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -963,6 +964,11 @@ private fun FooterNote() {
             "talks play your chosen recording.",
         fontSize = 12.sp, color = Ink.copy(alpha = 0.55f), textAlign = TextAlign.Center,
         modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+    )
+    Text(
+        stringResource(R.string.credits),
+        fontSize = 11.sp, color = Ink.copy(alpha = 0.45f), textAlign = TextAlign.Center,
+        modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
     )
 }
 

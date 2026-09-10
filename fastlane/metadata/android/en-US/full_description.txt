@@ -1,0 +1,16 @@
+Retreat Timer rings singing-bowl bells at scheduled times of day — the signal to begin or end a meditation sitting — so a retreat keeps running on schedule even when the teacher is not present. Each slot rings three bells (the default) or one, chosen per bell.
+
+The bells ring no matter what: locked screen, deep sleep, Doze, hours unattended. Each bell is scheduled with the exact alarm-clock mechanism the stock Clock app uses, then played by a foreground service holding a wake lock through the alarm audio stream at the volume you set. Alarms are re-armed after a reboot, time change or app update.
+
+Features:
+- Any number of daily bell slots, each editable and switchable on/off
+- Three bells or one per slot, with a preview in the picker
+- Five loudness-matched bowl recordings, or your own mp3/wav file
+- Scheduled dharma talks from your phone, a kDrive share link or a podcast feed
+- Separate bell and talk volumes, each with a test button
+- Mini player with draggable progress bar, ±10 s, restart and stop
+- Optional silent keep-alive so a Bluetooth speaker stays connected between bells
+
+No ads, no tracking, no accounts. Permissions are limited to exact alarms, boot receipt, wake lock, foreground-service playback and notifications.
+
+Pierre Gallaz · developed with Claude Code
