@@ -672,7 +672,7 @@ private fun ReliabilityCard(tick: Long) {
     }
 }
 
-/** Choose which bowl rings for every bell entry. All four are loudness-matched,
+/** Choose which bowl rings for every bell entry. All five are loudness-matched,
  *  so switching is purely about timbre, not volume. How many times it strikes is
  *  set per bell entry, not here — see [StrikeChoice]. */
 @Composable

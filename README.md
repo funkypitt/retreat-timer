@@ -58,12 +58,12 @@ Keep the phone plugged in and the bells will play all day on their own.
 ./gradlew assembleDebug
 ```
 
-Four selectable bell sounds (`app/src/main/res/raw/bell_*.mp3`) — singing bell,
-Tibetan E♭ bowl, gong bowl, and Satipanya. Each is one bowl struck three times,
-the strike allowed to ring out **fully** before the next. Each also ships a
-single-strike cut (`bell_*_one.mp3`) for slots set to one bell. All eight are
-loudness-matched to −20 LUFS, so neither switching bowl nor switching between one
-and three strikes changes the volume in the room.
+Five selectable bell sounds (`app/src/main/res/raw/bell_*.mp3`) — singing bell,
+Tibetan E♭ bowl, gong bowl, Satipanya, and enpleineconscience.ch. Each is one
+bowl struck three times, the strike allowed to ring out before the next. Each
+also ships a single-strike cut (`bell_*_one.mp3`) for slots set to one bell. All
+ten are loudness-matched to −20 LUFS, so neither switching bowl nor switching
+between one and three strikes changes the volume in the room.
 
 The first three are generated from the source samples in the repo root (linear
 gain to match loudness, then `ffmpeg concat` ×3). Satipanya comes from
@@ -91,6 +91,31 @@ under the other bowls and is gained back to the shared −20 LUFS:
 ffmpeg -i app/src/main/res/raw/bell_satipanya.mp3 \
   -af "atrim=0:16,volume=4.2dB,afade=t=out:st=15:d=1.0,aformat=channel_layouts=stereo" \
   -ar 44100 -b:a 192k app/src/main/res/raw/bell_satipanya_one.mp3
+```
+
+enpleineconscience.ch comes from `enpleineconscience.wav`, a mono 16-bit
+recording of the centre's own bowl struck three times (at 0 s, 4.2 s and 7.6 s —
+a smaller bowl with a shorter ring, so its strikes come closer together than
+Satipanya's). Like Satipanya it is a natural three-strike recording and is used
+whole: the raw file sits at −32 LUFS, so it is gained +12 dB, trimmed of its
+trailing room noise (the bowl is below −60 dBFS by 12 s), and converted to
+stereo:
+
+```
+ffmpeg -i enpleineconscience.wav \
+  -af "volume=12.0dB,atrim=0:15.0,afade=t=out:st=14.0:d=1.0,aformat=channel_layouts=stereo" \
+  -ar 44100 -b:a 192k app/src/main/res/raw/bell_enpleineconscience.mp3
+```
+
+Its single is the first strike, cut just before the second lands at 4.205 s. By
+then the first strike is 32 dB under its own peak, so the 1.2 s fade that ends
+the cut is all but inaudible. The first strike is the loudest of the three, so
+on its own it needs less gain than the whole recording to reach −20 LUFS:
+
+```
+ffmpeg -i enpleineconscience.wav \
+  -af "atrim=0:4.18,volume=9.2dB,afade=t=out:st=3.0:d=1.18,aformat=channel_layouts=stereo" \
+  -ar 44100 -b:a 192k app/src/main/res/raw/bell_enpleineconscience_one.mp3
 ```
 
 No ads, no tracking, no accounts. Permissions are limited to exact alarms, boot
