@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Auto Backup (Android 6-11): keep the schedule and settings, leave out the
+     downloaded talks and the custom bell, which would blow the 25 MB quota and
+     silently cancel the whole backup. -->
+<full-backup-content>
+    <exclude domain="file" path="talks" />
+    <exclude domain="file" path="custom_bell" />
+</full-backup-content>

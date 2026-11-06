@@ -13,6 +13,7 @@ import android.provider.OpenableColumns
 import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
@@ -73,6 +74,9 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Android 15+ draws behind the system bars whatever we say; do it on every
+        // version so the layout is the same everywhere, and pad the content below.
+        enableEdgeToEdge()
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
@@ -98,7 +102,10 @@ class MainActivity : ComponentActivity() {
 private fun RetreatApp() {
     var tab by remember { mutableStateOf(0) }
     Surface(modifier = Modifier.fillMaxSize(), color = Paper) {
-        Column(Modifier.fillMaxSize()) {
+        Column(
+            Modifier.fillMaxSize()
+                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)),
+        ) {
             Spacer(Modifier.height(20.dp))
             Header()
             TabRow(
@@ -114,7 +121,10 @@ private fun RetreatApp() {
                     text = { Text("Library", fontWeight = FontWeight.SemiBold) },
                     icon = { Icon(Icons.Filled.LibraryMusic, null) })
             }
-            Box(Modifier.weight(1f)) {
+            // The player bar, when shown, keeps its controls above the navigation
+            // bar itself; without it the lists must stay clear of that bar.
+            val barShown = PlaybackState.title != null
+            Box(Modifier.weight(1f).then(if (barShown) Modifier else Modifier.navigationBarsPadding())) {
                 if (tab == 0) ScheduleTab() else LibraryTab(onGoToSchedule = { tab = 0 })
             }
             NowPlayingBar()
@@ -144,7 +154,7 @@ private fun NowPlayingBar() {
     val remaining = (duration - shown).coerceAtLeast(0)
 
     Surface(color = Ink, modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(horizontal = 14.dp, vertical = 8.dp)) {
+        Column(Modifier.navigationBarsPadding().padding(horizontal = 14.dp, vertical = 8.dp)) {
             Text(
                 title, color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 15.sp,
                 maxLines = 1, overflow = TextOverflow.Ellipsis,
@@ -629,7 +639,8 @@ private fun ReliabilityCard(tick: Long) {
                 PackageManager.PERMISSION_GRANTED
         else true
     }
-    val allOk = battOk && notifOk
+    val alarmsOk = remember(tick) { BellScheduler.canScheduleExact(ctx) }
+    val allOk = battOk && notifOk && alarmsOk
 
     Card(
         colors = CardDefaults.cardColors(containerColor = if (allOk) GoodGreen.copy(alpha = 0.12f) else WarnAmber.copy(alpha = 0.12f)),
@@ -658,6 +669,16 @@ private fun ReliabilityCard(tick: Long) {
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = WarnAmber),
                 ) { Text("Allow background running") }
+            }
+            if (!alarmsOk && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                Button(
+                    onClick = {
+                        val i = Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM)
+                            .setData(Uri.parse("package:${ctx.packageName}"))
+                        runCatching { ctx.startActivity(i) }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = WarnAmber),
+                ) { Text("Allow alarms and reminders") }
             }
             if (!notifOk) {
                 Button(

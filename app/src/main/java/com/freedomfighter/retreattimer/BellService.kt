@@ -187,9 +187,14 @@ class BellService : Service() {
         )
     }
 
+    /** The channel is created once per service instance, not twice a second
+     *  from the progress ticker. */
+    private var channelReady = false
+
     private fun buildNotification(playing: Boolean, position: Int, duration: Int): android.app.Notification {
         val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !channelReady) {
+            channelReady = true
             // IMPORTANCE_HIGH so the transport controls pop up as a heads-up, but
             // silent and still: the bell itself is the sound, and a notification
             // ding or buzz out of the phone is exactly the noise a silent retreat
@@ -209,7 +214,7 @@ class BellService : Service() {
             runCatching { nm.deleteNotificationChannel(LEGACY_CHANNEL_ID) }
         }
         val tap = PendingIntent.getActivity(
-            this, 0, Intent(this, MainActivity::class.java),
+            this, 0, Intent(this, MainActivity::class.java).setAction(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
         val toggle = servicePendingIntent(2, ACTION_TOGGLE)

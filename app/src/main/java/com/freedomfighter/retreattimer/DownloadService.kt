@@ -41,6 +41,9 @@ class DownloadService : Service() {
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private val queue = ConcurrentLinkedQueue<Req>()
     private var worker: Job? = null
+    /** Latest start id, so the stop in [finishIfIdle] is refused by the framework
+     *  when a newer start is already on its way (no stranded download). */
+    @Volatile private var lastStartId = -1
     private var wakeLock: PowerManager.WakeLock? = null
 
     @Volatile private var total = 0
@@ -52,6 +55,7 @@ class DownloadService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        lastStartId = startId
         intent?.let {
             val key = it.getStringExtra(EXTRA_KEY)
             val url = it.getStringExtra(EXTRA_URL)
@@ -68,7 +72,7 @@ class DownloadService : Service() {
         }
         // startForeground must happen promptly on every start, before any work.
         startDownloadForeground()
-        ensureWorker()
+        if (queue.isNotEmpty()) ensureWorker() else finishIfIdle()
         // In-memory queue: a null-intent relaunch would have nothing to do.
         return START_NOT_STICKY
     }
@@ -123,17 +127,45 @@ class DownloadService : Service() {
             total = 0
             done = 0
             stopForeground(STOP_FOREGROUND_REMOVE)
-            stopSelf()
+            worker = null
+            stopSelf(lastStartId)
         } else {
             worker = scope.launch { runQueue() }
         }
     }
 
+    /** Android 15+: the dataSync budget (6 h per day) ran out and the system wants
+     *  the service gone within seconds, or it is an ANR. */
+    override fun onTimeout(startId: Int, fgsType: Int) {
+        failRemaining("Download time budget used up; try again later")
+    }
+
+    /** Give up on everything queued, show the reason on each row, and stop. */
+    private fun failRemaining(reason: String) {
+        worker?.cancel()
+        worker = null
+        val stranded = DownloadState.inFlight
+        android.os.Handler(android.os.Looper.getMainLooper()).post {
+            DownloadState.inFlight = emptySet()
+            DownloadState.errors = DownloadState.errors + stranded.associateWith { reason }
+        }
+        while (queue.poll() != null) { /* drain */ }
+        releaseWakeLock()
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        stopSelf()
+    }
+
     private fun startDownloadForeground() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startForeground(NOTIF_ID, buildNotification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
-        } else {
-            startForeground(NOTIF_ID, buildNotification())
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                startForeground(NOTIF_ID, buildNotification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+            } else {
+                startForeground(NOTIF_ID, buildNotification())
+            }
+        } catch (e: IllegalStateException) {
+            // Android 15+ ForegroundServiceStartNotAllowedException: the daily
+            // dataSync budget is spent. Fail the rows instead of crashing.
+            failRemaining("Downloads are not allowed right now; try again later")
         }
     }
 
@@ -168,7 +200,7 @@ class DownloadService : Service() {
             )
         }
         val tap = PendingIntent.getActivity(
-            this, 0, Intent(this, MainActivity::class.java),
+            this, 0, Intent(this, MainActivity::class.java).setAction(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
         val title = current.ifBlank { getString(R.string.app_name) }

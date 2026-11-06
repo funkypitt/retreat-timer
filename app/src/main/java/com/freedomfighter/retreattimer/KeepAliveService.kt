@@ -46,6 +46,9 @@ class KeepAliveService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_STOP) {
+            // Stop from the notification = the toggle is off, so neither a sticky
+            // restart nor the next boot brings the hiss back.
+            BellStore.setKeepSpeakerAwake(this, false)
             stopSelf()
             return START_NOT_STICKY
         }
@@ -146,7 +149,7 @@ class KeepAliveService : Service() {
             )
         }
         val tap = PendingIntent.getActivity(
-            this, 0, Intent(this, MainActivity::class.java),
+            this, 0, Intent(this, MainActivity::class.java).setAction(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
         val stop = PendingIntent.getService(
@@ -210,11 +213,31 @@ class KeepAliveService : Service() {
         fun start(ctx: Context) {
             if (!BellStore.keepSpeakerAwake(ctx)) return
             val i = Intent(ctx, KeepAliveService::class.java)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                ctx.startForegroundService(i)
-            } else {
-                ctx.startService(i)
+            // ForegroundServiceStartNotAllowedException (an IllegalStateException)
+            // if the OS refuses a background start: better silent than a crash.
+            runCatching {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    ctx.startForegroundService(i)
+                } else {
+                    ctx.startService(i)
+                }
             }
+        }
+
+        const val ACTION_RESUME = "com.freedomfighter.retreattimer.RESUME_KEEPALIVE"
+
+        /** Android 15+: bring the service back one minute from now through an exact
+         *  alarm, the one background path still allowed to start it. */
+        fun resumeLater(ctx: Context) {
+            if (!BellStore.keepSpeakerAwake(ctx)) return
+            val am = ctx.getSystemService(Context.ALARM_SERVICE) as android.app.AlarmManager
+            val pi = android.app.PendingIntent.getBroadcast(
+                ctx, 0x4B41,
+                Intent(ctx, AlarmReceiver::class.java).setAction(ACTION_RESUME),
+                android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE,
+            )
+            val at = System.currentTimeMillis() + 60_000L
+            runCatching { am.setExactAndAllowWhileIdle(android.app.AlarmManager.RTC_WAKEUP, at, pi) }
         }
     }
 }

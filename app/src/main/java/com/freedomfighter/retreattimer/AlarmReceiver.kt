@@ -16,6 +16,11 @@ import androidx.core.content.ContextCompat
  */
 class AlarmReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
+        if (intent.action == KeepAliveService.ACTION_RESUME) {
+            // One-shot exact alarm set by BootReceiver on Android 15+ (see there).
+            KeepAliveService.start(context)
+            return
+        }
         val id = intent.getLongExtra(BellScheduler.EXTRA_BELL_ID, -1L)
 
         val serviceIntent = Intent(context, BellService::class.java).apply {

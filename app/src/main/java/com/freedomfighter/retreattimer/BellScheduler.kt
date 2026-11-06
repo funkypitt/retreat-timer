@@ -4,6 +4,7 @@ import android.app.AlarmManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.net.Uri
 import java.util.Calendar
 
@@ -25,6 +26,14 @@ object BellScheduler {
     /** Cancel everything we previously scheduled, then arm the next occurrence of
      *  each enabled bell. Safe to call as often as we like — it is the single
      *  source of truth and is invoked after every edit, every fire, and boot. */
+    /** False only on Android 12/12L when the user revoked "Alarms & reminders";
+     *  from Android 13 USE_EXACT_ALARM is granted at install. */
+    fun canScheduleExact(ctx: Context): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return true
+        val am = ctx.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        return am.canScheduleExactAlarms()
+    }
+
     fun rescheduleAll(ctx: Context) {
         val am = ctx.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         val bells = BellStore.load(ctx)
@@ -40,11 +49,13 @@ object BellScheduler {
             val triggerAt = nextTriggerMillis(bell)
             val showPi = PendingIntent.getActivity(
                 ctx, bell.id.toInt(),
-                Intent(ctx, MainActivity::class.java),
+                Intent(ctx, MainActivity::class.java).setAction(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER),
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
             )
             val firePi = firePendingIntent(ctx, bell)
-            am.setAlarmClock(AlarmManager.AlarmClockInfo(triggerAt, showPi), firePi)
+            // Android 12/12L: "Alarms & reminders" can be revoked by the user; the
+            // Ready card then shows the fix instead of the app crashing here.
+            runCatching { am.setAlarmClock(AlarmManager.AlarmClockInfo(triggerAt, showPi), firePi) }
         }
     }
 

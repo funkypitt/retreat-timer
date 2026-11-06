@@ -6,14 +6,14 @@ plugins {
 
 android {
     namespace = "com.freedomfighter.retreattimer"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.freedomfighter.retreattimer"
         minSdk = 26
-        targetSdk = 34
-        versionCode = 21
-        versionName = "1.13.1"
+        targetSdk = 36
+        versionCode = 22
+        versionName = "1.14.0"
     }
 
     buildTypes {
