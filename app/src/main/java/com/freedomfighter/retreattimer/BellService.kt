@@ -118,11 +118,11 @@ class BellService : Service() {
                 // devices. Must come after prepare() — before the data source is
                 // set the hint is silently refused (see [preferBluetoothOutput]).
                 // Fail-safe: never aborts the ring.
-                val pinned = preferBluetoothOutput(this@BellService)
+                val pinned = preferBluetoothOutputCompat(this@BellService)
                 start()
                 // A live track can still be re-routed. Only worth doing when the
                 // hint was refused; re-pinning the same device is otherwise a no-op.
-                if (!pinned) preferBluetoothOutput(this@BellService)
+                if (!pinned) preferBluetoothOutputCompat(this@BellService)
             }
             PlaybackState.title = currentTitle
             PlaybackState.durationMs = player?.duration ?: 0

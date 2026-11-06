@@ -54,9 +54,9 @@ object BellAudio {
                 setVolume(gain, gain)
                 // Match the room's Bluetooth speaker, not the phone — after
                 // prepare(), or the hint is dropped (see [preferBluetoothOutput]).
-                val pinned = preferBluetoothOutput(ctx)
+                val pinned = preferBluetoothOutputCompat(ctx)
                 start()
-                if (!pinned) preferBluetoothOutput(ctx)
+                if (!pinned) preferBluetoothOutputCompat(ctx)
             }
         }
     }

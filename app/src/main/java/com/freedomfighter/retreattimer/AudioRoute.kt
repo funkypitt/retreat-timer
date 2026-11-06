@@ -4,6 +4,8 @@ import android.content.Context
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
 import android.media.AudioRouting
+import android.media.MediaPlayer
+import android.os.Build
 
 /**
  * The connected Bluetooth (or BLE) speaker/headset to pin playback to, or null if
@@ -63,3 +65,12 @@ fun gainScalar(pct: Int): Float {
     val f = pct.coerceIn(0, 100) / 100f
     return f * f
 }
+
+/**
+ * [MediaPlayer] only implements [AudioRouting] from Android 9 (API 28). On Android
+ * 7 and 8 the cast at the call site throws before `start()` ever runs — the bell
+ * is simply silent, with no crash to show for it (the 1.14.0 Android 8.0/8.1 and
+ * Android 7 bug). So the hint is only attempted where the interface exists.
+ */
+fun MediaPlayer.preferBluetoothOutputCompat(ctx: Context): Boolean =
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) (this as AudioRouting).preferBluetoothOutput(ctx) else false
