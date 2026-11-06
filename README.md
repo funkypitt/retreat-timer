@@ -43,6 +43,9 @@ All three deliver the same file, with the same signature.
 ./gradlew assembleDebug
 ```
 
+Android 8 or later. For an old tablet still on Android 7, `./gradlew assembleRelease -PminSdk=24`
+builds the same app with the lower minimum (sent by hand, never published).
+
 The bundled bell files are made with ffmpeg from the samples in the repo root; the
 commands are in [docs/NOTES.md](docs/NOTES.md).
 

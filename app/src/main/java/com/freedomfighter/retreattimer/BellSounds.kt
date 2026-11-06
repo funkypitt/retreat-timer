@@ -51,9 +51,14 @@ object BellSounds {
         }
         val tmp = File(ctx.filesDir, "custom_bell.tmp")
         ctx.contentResolver.openInputStream(uri)!!.use { i -> tmp.outputStream().use { o -> i.copyTo(o) } }
-        MediaMetadataRetriever().use { r ->
+        // Not `use {}`: MediaMetadataRetriever is AutoCloseable only from Android 10,
+        // and on older devices the call failed silently, so no custom sound could be imported.
+        val r = MediaMetadataRetriever()
+        try {
             r.setDataSource(tmp.absolutePath)
             r.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)!!.toLong()
+        } finally {
+            r.release()
         }
         if (!tmp.renameTo(File(ctx.filesDir, "custom_bell"))) error("rename")
         BellStore.setCustomBellName(ctx, (name ?: uri.lastPathSegment ?: "your sound").substringBeforeLast('.').ifBlank { "your sound" })

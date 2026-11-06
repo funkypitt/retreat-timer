@@ -10,7 +10,10 @@ android {
 
     defaultConfig {
         applicationId = "com.freedomfighter.retreattimer"
-        minSdk = 26
+        // Android 8 by default. `-PminSdk=24` builds the "android7" variant for old
+        // tablets (Galaxy Tab A 2015 stops at Android 7.1); it is the same app, the
+        // API 26+ calls are all guarded, and it is only ever sent by hand.
+        minSdk = (project.findProperty("minSdk") as String?)?.toInt() ?: 26
         targetSdk = 36
         versionCode = 23
         versionName = "1.14.0"
