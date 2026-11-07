@@ -290,10 +290,7 @@ private fun ScheduleTab() {
         items(bells, key = { it.id }) { bell ->
             ScheduleRow(
                 bell = bell,
-                onToggle = {
-                    if (bell.enabled) BellService.stopIfBell(ctx, bell.id)
-                    persist(bells.map { if (it.id == bell.id) it.copy(enabled = !it.enabled) else it })
-                },
+                onToggle = { persist(bells.map { if (it.id == bell.id) it.copy(enabled = !it.enabled) else it }) },
                 onEdit = {
                     // A talk keeps no strike count, so it opens the plain picker.
                     timeRequest = TimeRequest(
@@ -307,7 +304,7 @@ private fun ScheduleTab() {
                         )
                     }
                 },
-                onDelete = { BellService.stopIfBell(ctx, bell.id); persist(bells.filterNot { it.id == bell.id }) },
+                onDelete = { persist(bells.filterNot { it.id == bell.id }) },
                 onPlay = {
                     if (bell.isTalk) BellService.playTalk(ctx, bell.talkUri!!, bell.talkTitle ?: "Dharma talk")
                     else BellAudio.playTestSelected(ctx, bell.singleStrike)

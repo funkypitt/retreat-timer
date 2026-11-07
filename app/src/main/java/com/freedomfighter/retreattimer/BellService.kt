@@ -37,9 +37,8 @@ class BellService : Service() {
     private var startupLock: PowerManager.WakeLock? = null
     private var currentTitle: String? = null
 
-    /** Which slot is ringing (−1 for a talk started by hand), so switching that
-     *  slot off stops it, and the Bells / Talks trims each reach their own source. */
-    private var currentBellId = -1L
+    /** Whether a talk or a bell is playing, so the Bells / Talks trims each reach
+     *  their own source. */
     private var currentIsTalk = false
 
     /** Plays still to come of the custom recording: a three-bell slot plays it three times over. */
@@ -79,7 +78,6 @@ class BellService : Service() {
         val talkTitle = intent?.getStringExtra(BellScheduler.EXTRA_TALK_TITLE)
         val single = intent?.getBooleanExtra(BellScheduler.EXTRA_SINGLE_STRIKE, false) ?: false
         currentTitle = talkTitle ?: getString(R.string.ringing_title)
-        currentBellId = intent?.getLongExtra(BellScheduler.EXTRA_BELL_ID, -1L) ?: -1L
         currentIsTalk = talkUri != null
         currentTextRes = when {
             talkUri != null -> R.string.playing_text
@@ -323,13 +321,6 @@ class BellService : Service() {
         /** Re-apply the Talks trim to a talk playing now. No-op otherwise. */
         fun setTalkGain(pct: Int) {
             active?.takeIf { it.currentIsTalk }?.applyGainLive(pct)
-        }
-
-        /** Switching a slot off (or deleting it) while it is the one ringing stops
-         *  the ring: the switch is what a listener reaches for, and a three-bell
-         *  recording can last over a minute. */
-        fun stopIfBell(ctx: Context, id: Long) {
-            if (active?.currentBellId == id) stop(ctx)
         }
 
         const val ACTION_STOP = "com.freedomfighter.retreattimer.STOP"

@@ -23,10 +23,11 @@ class AlarmReceiver : BroadcastReceiver() {
         }
         val id = intent.getLongExtra(BellScheduler.EXTRA_BELL_ID, -1L)
 
-        // The schedule is the single source of truth. Whatever AlarmManager still
-        // holds for a slot that has since been switched off or deleted — however
-        // it survived the cancel — must not ring.
-        if (BellStore.find(context, id)?.enabled != true) {
+        // The schedule is the single source of truth: a slot the teacher switched
+        // off must not ring, whatever AlarmManager still holds for it (a cancel
+        // that did not take on one old Samsung tablet). Only a slot found and
+        // switched off is skipped; an unreadable store changes nothing.
+        if (BellStore.find(context, id)?.enabled == false) {
             BellScheduler.rescheduleAll(context)
             return
         }
