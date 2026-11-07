@@ -290,7 +290,10 @@ private fun ScheduleTab() {
         items(bells, key = { it.id }) { bell ->
             ScheduleRow(
                 bell = bell,
-                onToggle = { persist(bells.map { if (it.id == bell.id) it.copy(enabled = !it.enabled) else it }) },
+                onToggle = {
+                    if (bell.enabled) BellService.stopIfBell(ctx, bell.id)
+                    persist(bells.map { if (it.id == bell.id) it.copy(enabled = !it.enabled) else it })
+                },
                 onEdit = {
                     // A talk keeps no strike count, so it opens the plain picker.
                     timeRequest = TimeRequest(
@@ -304,7 +307,7 @@ private fun ScheduleTab() {
                         )
                     }
                 },
-                onDelete = { persist(bells.filterNot { it.id == bell.id }) },
+                onDelete = { BellService.stopIfBell(ctx, bell.id); persist(bells.filterNot { it.id == bell.id }) },
                 onPlay = {
                     if (bell.isTalk) BellService.playTalk(ctx, bell.talkUri!!, bell.talkTitle ?: "Dharma talk")
                     else BellAudio.playTestSelected(ctx, bell.singleStrike)
@@ -794,7 +797,7 @@ private fun BellVolumeCard() {
             "Test rings one bell — enough to judge the level without sitting through three.",
         storedPct = BellStore.bellGain(ctx),
         onStore = { BellStore.setBellGain(ctx, it) },
-        onLiveApply = { BellAudio.setGain(it) },
+        onLiveApply = { BellAudio.setGain(it); BellService.setBellGain(it) },
         // One strike, deliberately: this is a level check, and every recording is
         // loudness-matched, so three would only make the same point three times.
         onTest = { BellAudio.playTestSelected(ctx, single = true) },
@@ -826,7 +829,7 @@ private fun TalkVolumeCard(bells: List<BellTime>, talks: List<DharmaTalk>, tick:
         },
         storedPct = BellStore.talkGain(ctx),
         onStore = { BellStore.setTalkGain(ctx, it) },
-        onLiveApply = { BellService.setGain(it) },
+        onLiveApply = { BellService.setTalkGain(it) },
         onTest = sample?.let { (uri, title) -> { BellService.playTalk(ctx, uri, title) } },
     )
 }

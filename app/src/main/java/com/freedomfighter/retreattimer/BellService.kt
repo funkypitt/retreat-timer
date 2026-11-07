@@ -37,6 +37,11 @@ class BellService : Service() {
     private var startupLock: PowerManager.WakeLock? = null
     private var currentTitle: String? = null
 
+    /** Which slot is ringing (−1 for a talk started by hand), so switching that
+     *  slot off stops it, and the Bells / Talks trims each reach their own source. */
+    private var currentBellId = -1L
+    private var currentIsTalk = false
+
     /** Plays still to come of the custom recording: a three-bell slot plays it three times over. */
     private var repeatsLeft = 1
 
@@ -74,6 +79,8 @@ class BellService : Service() {
         val talkTitle = intent?.getStringExtra(BellScheduler.EXTRA_TALK_TITLE)
         val single = intent?.getBooleanExtra(BellScheduler.EXTRA_SINGLE_STRIKE, false) ?: false
         currentTitle = talkTitle ?: getString(R.string.ringing_title)
+        currentBellId = intent?.getLongExtra(BellScheduler.EXTRA_BELL_ID, -1L) ?: -1L
+        currentIsTalk = talkUri != null
         currentTextRes = when {
             talkUri != null -> R.string.playing_text
             single -> R.string.ringing_text_one
@@ -237,6 +244,11 @@ class BellService : Service() {
             .setCategory(NotificationCompat.CATEGORY_TRANSPORT)
             .setOnlyAlertOnce(true)
             .setOngoing(playing)
+            // Before Android 8 there is no channel: the transport controls only pop
+            // up with a high priority AND a sound or vibration. A zero-length
+            // vibration pattern satisfies that without any buzz or ding.
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .apply { if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) setVibrate(longArrayOf(0L)) }
             .addAction(android.R.drawable.ic_media_rew, getString(R.string.back10), back10)
             .addAction(
                 if (playing) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play,
@@ -302,9 +314,22 @@ class BellService : Service() {
          *  recording without an intent round-trip. Single process, main thread. */
         @Volatile private var active: BellService? = null
 
-        /** Re-apply the talk trim to whatever is playing now. No-op if nothing is. */
-        fun setGain(pct: Int) {
-            active?.applyGainLive(pct)
+        /** Re-apply the Bells trim to a bell ringing now — so dragging it to zero
+         *  silences a ring in progress, not just the next one. No-op otherwise. */
+        fun setBellGain(pct: Int) {
+            active?.takeIf { !it.currentIsTalk }?.applyGainLive(pct)
+        }
+
+        /** Re-apply the Talks trim to a talk playing now. No-op otherwise. */
+        fun setTalkGain(pct: Int) {
+            active?.takeIf { it.currentIsTalk }?.applyGainLive(pct)
+        }
+
+        /** Switching a slot off (or deleting it) while it is the one ringing stops
+         *  the ring: the switch is what a listener reaches for, and a three-bell
+         *  recording can last over a minute. */
+        fun stopIfBell(ctx: Context, id: Long) {
+            if (active?.currentBellId == id) stop(ctx)
         }
 
         const val ACTION_STOP = "com.freedomfighter.retreattimer.STOP"

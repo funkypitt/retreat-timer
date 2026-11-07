@@ -23,6 +23,14 @@ class AlarmReceiver : BroadcastReceiver() {
         }
         val id = intent.getLongExtra(BellScheduler.EXTRA_BELL_ID, -1L)
 
+        // The schedule is the single source of truth. Whatever AlarmManager still
+        // holds for a slot that has since been switched off or deleted — however
+        // it survived the cancel — must not ring.
+        if (BellStore.find(context, id)?.enabled != true) {
+            BellScheduler.rescheduleAll(context)
+            return
+        }
+
         val serviceIntent = Intent(context, BellService::class.java).apply {
             putExtra(BellScheduler.EXTRA_BELL_ID, id)
             putExtra(
