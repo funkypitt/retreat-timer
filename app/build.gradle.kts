@@ -15,8 +15,8 @@ android {
         // API 26+ calls are all guarded, and it is only ever sent by hand.
         minSdk = (project.findProperty("minSdk") as String?)?.toInt() ?: 26
         targetSdk = 36
-        versionCode = 23
-        versionName = "1.14.0"
+        versionCode = 24
+        versionName = "1.14.1"
     }
 
     buildTypes {
